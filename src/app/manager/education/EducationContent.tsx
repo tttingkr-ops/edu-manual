@@ -1,0 +1,144 @@
+// Created: 2026-01-27 16:30:00
+'use client'
+
+import { useState } from 'react'
+import PostCard from '@/components/PostCard'
+
+interface Post {
+  id: string
+  title: string
+  content_type: 'video' | 'document'
+  content: string
+  category: string
+  created_at: string
+  updated_at: string
+  author_id: string
+  isRead: boolean
+}
+
+interface EducationContentProps {
+  posts: Post[]
+}
+
+const CATEGORIES = [
+  { id: '남자_매니저_대화', label: '남자 매니저 대화' },
+  { id: '여자_매니저_대화', label: '여자 매니저 대화' },
+  { id: '여자_매니저_소개', label: '여자 매니저 소개' },
+  { id: '추가_서비스_규칙', label: '추가 서비스 규칙' },
+]
+
+export default function EducationContent({ posts }: EducationContentProps) {
+  const [activeTab, setActiveTab] = useState(CATEGORIES[0].id)
+
+  // 현재 탭의 게시물 필터링
+  const filteredPosts = posts.filter((post) => post.category === activeTab)
+
+  // 미확인 게시물 수 계산
+  const getUnreadCount = (categoryId: string) => {
+    return posts.filter((post) => post.category === categoryId && !post.isRead)
+      .length
+  }
+
+  return (
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* 페이지 헤더 */}
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-gray-900">교육 자료</h1>
+        <p className="mt-2 text-gray-600">
+          각 카테고리별 교육 자료를 학습하세요. 미확인 자료는 강조 표시됩니다.
+        </p>
+      </div>
+
+      {/* 탭 네비게이션 */}
+      <div className="mb-6">
+        <div className="border-b border-gray-200">
+          <nav className="flex -mb-px overflow-x-auto" aria-label="Tabs">
+            {CATEGORIES.map((category) => {
+              const unreadCount = getUnreadCount(category.id)
+              const isActive = activeTab === category.id
+
+              return (
+                <button
+                  key={category.id}
+                  onClick={() => setActiveTab(category.id)}
+                  className={`relative flex-shrink-0 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                    isActive
+                      ? 'border-primary-500 text-primary-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  {category.label}
+                  {unreadCount > 0 && (
+                    <span
+                      className={`ml-2 px-2 py-0.5 text-xs rounded-full ${
+                        isActive
+                          ? 'bg-primary-100 text-primary-700'
+                          : 'bg-orange-100 text-orange-700'
+                      }`}
+                    >
+                      {unreadCount}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </nav>
+        </div>
+      </div>
+
+      {/* 게시물 목록 */}
+      <div className="space-y-4">
+        {filteredPosts.length === 0 ? (
+          <div className="text-center py-12">
+            <svg
+              className="mx-auto h-12 w-12 text-gray-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+            <h3 className="mt-2 text-sm font-medium text-gray-900">
+              게시물 없음
+            </h3>
+            <p className="mt-1 text-sm text-gray-500">
+              이 카테고리에는 아직 교육 자료가 없습니다.
+            </p>
+          </div>
+        ) : (
+          filteredPosts.map((post) => (
+            <PostCard
+              key={post.id}
+              id={post.id}
+              title={post.title}
+              contentType={post.content_type}
+              category={post.category}
+              createdAt={post.created_at}
+              isRead={post.isRead}
+            />
+          ))
+        )}
+      </div>
+
+      {/* 요약 정보 */}
+      {filteredPosts.length > 0 && (
+        <div className="mt-8 p-4 bg-gray-100 rounded-lg">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-gray-600">
+              전체 {filteredPosts.length}개 자료
+            </span>
+            <span className="text-gray-600">
+              읽음: {filteredPosts.filter((p) => p.isRead).length}개 / 미확인:{' '}
+              {filteredPosts.filter((p) => !p.isRead).length}개
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
