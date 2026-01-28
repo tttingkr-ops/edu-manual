@@ -28,11 +28,11 @@ export default async function EducationPage() {
 
   // 읽음 상태를 Map으로 변환
   const readStatusMap = new Map(
-    readStatuses?.map((rs) => [rs.post_id, rs.is_read]) || []
+    readStatuses?.map((rs: { post_id: string; is_read: boolean }) => [rs.post_id, rs.is_read]) || []
   )
 
   // 게시물에 읽음 상태 추가
-  const postsWithReadStatus = (posts || []).map((post) => ({
+  const postsWithReadStatus = (posts || []).map((post: { id: string; title: string; content: string; content_type: string; category: string; created_at: string }) => ({
     ...post,
     isRead: readStatusMap.get(post.id) || false,
   }))

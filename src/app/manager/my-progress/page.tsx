@@ -2,6 +2,25 @@
 import { createClient } from '@/lib/supabase/server'
 import ProgressContent from './ProgressContent'
 
+interface ReadStatus {
+  post_id: string
+  is_read: boolean
+  read_at: string | null
+}
+
+interface Post {
+  id: string
+  title: string
+  category: string
+  content_type: 'video' | 'document'
+  created_at: string
+}
+
+interface PostWithReadStatus extends Post {
+  isRead: boolean
+  readAt: string | null
+}
+
 export default async function MyProgressPage() {
   const supabase = await createClient()
 
@@ -27,12 +46,12 @@ export default async function MyProgressPage() {
     .eq('user_id', user.id)
 
   // 읽음 상태를 Map으로 변환
-  const readStatusMap = new Map(
-    readStatuses?.map((rs) => [rs.post_id, { isRead: rs.is_read, readAt: rs.read_at }]) || []
+  const readStatusMap = new Map<string, { isRead: boolean; readAt: string | null }>(
+    readStatuses?.map((rs: ReadStatus) => [rs.post_id, { isRead: rs.is_read, readAt: rs.read_at }]) || []
   )
 
   // 게시물에 읽음 상태 추가
-  const postsWithReadStatus = (posts || []).map((post) => ({
+  const postsWithReadStatus: PostWithReadStatus[] = (posts || []).map((post: Post) => ({
     ...post,
     isRead: readStatusMap.get(post.id)?.isRead || false,
     readAt: readStatusMap.get(post.id)?.readAt || null,
@@ -41,8 +60,8 @@ export default async function MyProgressPage() {
   // 카테고리별 통계 계산
   const categories = ['남자_매니저_대화', '여자_매니저_대화', '여자_매니저_소개', '추가_서비스_규칙']
   const categoryStats = categories.map((category) => {
-    const categoryPosts = postsWithReadStatus.filter((p) => p.category === category)
-    const readCount = categoryPosts.filter((p) => p.isRead).length
+    const categoryPosts = postsWithReadStatus.filter((p: PostWithReadStatus) => p.category === category)
+    const readCount = categoryPosts.filter((p: PostWithReadStatus) => p.isRead).length
     return {
       category,
       total: categoryPosts.length,
