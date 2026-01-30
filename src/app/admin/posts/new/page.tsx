@@ -1,12 +1,15 @@
 // Created: 2026-01-27 17:20:00
+// Updated: 2026-01-29 - Supabase 실제 연동, 그룹 선택 UI 추가
 'use client'
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { createClient } from '@/lib/supabase/client'
 
 type ContentType = 'video' | 'document'
 type Category = '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개' | '추가_서비스_규칙'
+type GroupName = '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개'
 
 const CATEGORIES: { value: Category; label: string }[] = [
   { value: '남자_매니저_대화', label: '남자 매니저 대화' },
@@ -15,9 +18,18 @@ const CATEGORIES: { value: Category; label: string }[] = [
   { value: '추가_서비스_규칙', label: '추가 서비스 규칙' },
 ]
 
+const GROUPS: { value: GroupName; label: string }[] = [
+  { value: '남자_매니저_대화', label: '남자 매니저 대화' },
+  { value: '여자_매니저_대화', label: '여자 매니저 대화' },
+  { value: '여자_매니저_소개', label: '여자 매니저 소개' },
+]
+
 export default function NewPostPage() {
   const router = useRouter()
+  const supabase = createClient()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [selectedGroups, setSelectedGroups] = useState<GroupName[]>([])
   const [formData, setFormData] = useState({
     title: '',
     content_type: 'document' as ContentType,
@@ -25,15 +37,70 @@ export default function NewPostPage() {
     category: '남자_매니저_대화' as Category,
   })
 
+  // 그룹 토글 핸들러
+  const handleGroupToggle = (group: GroupName, checked: boolean) => {
+    if (checked) {
+      setSelectedGroups([...selectedGroups, group])
+    } else {
+      setSelectedGroups(selectedGroups.filter(g => g !== group))
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
+    setError(null)
 
-    // Mock 모드에서는 단순히 성공 메시지 표시 후 목록으로 이동
-    await new Promise((resolve) => setTimeout(resolve, 500)) // 시뮬레이션
+    try {
+      // 그룹 선택 검증
+      if (selectedGroups.length === 0) {
+        throw new Error('대상 그룹을 최소 1개 이상 선택해주세요.')
+      }
 
-    alert('교육 자료가 등록되었습니다. (Mock 모드)')
-    router.push('/admin/posts')
+      // 현재 로그인한 사용자 정보 가져오기
+      const { data: { user } } = await supabase.auth.getUser()
+
+      if (!user) {
+        throw new Error('로그인이 필요합니다.')
+      }
+
+      // 게시물 저장
+      const { data, error: insertError } = await supabase
+        .from('educational_posts')
+        .insert({
+          title: formData.title,
+          content_type: formData.content_type,
+          content: formData.content,
+          category: formData.category,
+          author_id: user.id,
+        })
+        .select()
+        .single()
+
+      if (insertError) throw insertError
+
+      // 그룹 관계 저장
+      const groupInserts = selectedGroups.map(groupName => ({
+        post_id: data.id,
+        group_name: groupName,
+      }))
+
+      const { error: groupError } = await supabase
+        .from('post_groups')
+        .insert(groupInserts)
+
+      if (groupError) {
+        // 롤백: 게시물 삭제
+        await supabase.from('educational_posts').delete().eq('id', data.id)
+        throw groupError
+      }
+
+      router.push('/admin/posts')
+    } catch (err: any) {
+      console.error('Error creating post:', err)
+      setError(err.message || '등록 중 오류가 발생했습니다.')
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -97,6 +164,32 @@ export default function NewPostPage() {
                   </option>
                 ))}
               </select>
+            </div>
+
+            {/* 대상 그룹 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                대상 그룹 <span className="text-red-500">*</span>
+              </label>
+              <div className="space-y-2">
+                {GROUPS.map((group) => (
+                  <label
+                    key={group.value}
+                    className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedGroups.includes(group.value)}
+                      onChange={(e) => handleGroupToggle(group.value, e.target.checked)}
+                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <span className="text-gray-700">{group.label}</span>
+                  </label>
+                ))}
+              </div>
+              <p className="mt-2 text-sm text-gray-500">
+                이 교육 자료를 볼 수 있는 그룹을 선택하세요.
+              </p>
             </div>
 
             {/* 콘텐츠 타입 */}
@@ -261,31 +354,12 @@ export default function NewPostPage() {
           )}
         </div>
 
-        {/* Mock 모드 안내 */}
-        <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <div className="flex items-start gap-3">
-            <svg
-              className="w-5 h-5 text-yellow-600 mt-0.5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-              />
-            </svg>
-            <div>
-              <p className="text-sm font-medium text-yellow-800">Mock 모드</p>
-              <p className="text-sm text-yellow-700">
-                현재 Supabase가 연결되지 않아 데이터가 실제로 저장되지 않습니다.
-                Supabase 연결 후 정상 동작합니다.
-              </p>
-            </div>
+        {/* 에러 메시지 */}
+        {error && (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-sm text-red-600">{error}</p>
           </div>
-        </div>
+        )}
 
         {/* 버튼 */}
         <div className="flex items-center justify-end gap-3">

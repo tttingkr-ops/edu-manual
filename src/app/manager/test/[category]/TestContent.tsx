@@ -1,9 +1,11 @@
 // Created: 2026-01-27 17:35:00
+// Updated: 2026-01-29 - 테스트 결과 DB 저장 추가
 'use client'
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { createClient } from '@/lib/supabase/client'
 
 interface Question {
   id: string
@@ -19,20 +21,24 @@ interface TestContentProps {
   questions: Question[]
   category: string
   categoryTitle: string
+  userId: string
 }
 
 export default function TestContent({
   questions,
   category,
   categoryTitle,
+  userId,
 }: TestContentProps) {
   const router = useRouter()
+  const supabase = createClient()
   const [currentIndex, setCurrentIndex] = useState(0)
   const [answers, setAnswers] = useState<(number | null)[]>(
     new Array(questions.length).fill(null)
   )
   const [showResult, setShowResult] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   const currentQuestion = questions[currentIndex]
   const answeredCount = answers.filter((a) => a !== null).length
@@ -68,6 +74,45 @@ export default function TestContent({
     }
 
     setIsSubmitting(true)
+    setSaveError(null)
+
+    // 결과 계산
+    const { correctCount, score } = calculateResult()
+
+    // 카테고리별 점수 계산
+    const categoryScores: Record<string, { correct: number; total: number }> = {}
+    questions.forEach((q, index) => {
+      const subCat = q.sub_category || '기타'
+      if (!categoryScores[subCat]) {
+        categoryScores[subCat] = { correct: 0, total: 0 }
+      }
+      categoryScores[subCat].total++
+      if (answers[index] === q.correct_answer) {
+        categoryScores[subCat].correct++
+      }
+    })
+
+    try {
+      // DB에 결과 저장
+      const { error } = await supabase.from('test_results').insert({
+        user_id: userId,
+        category: category,
+        score: score,
+        correct_count: correctCount,
+        total_count: questions.length,
+        category_scores: categoryScores,
+        test_date: new Date().toISOString(),
+      })
+
+      if (error) {
+        console.error('Error saving test result:', error)
+        setSaveError('결과 저장 중 오류가 발생했습니다.')
+      }
+    } catch (err) {
+      console.error('Error saving test result:', err)
+      setSaveError('결과 저장 중 오류가 발생했습니다.')
+    }
+
     setShowResult(true)
   }
 
@@ -182,36 +227,24 @@ export default function TestContent({
                       </div>
                     ))}
                   </div>
+
+                  {/* 관련 교육 자료 링크 */}
+                  {question.related_post_id && (
+                    <Link
+                      href={`/manager/education/${question.related_post_id}`}
+                      className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-primary-100 text-primary-700 rounded-lg hover:bg-primary-200 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                      </svg>
+                      관련 교육 자료 다시 보기
+                    </Link>
+                  )}
                 </div>
               ))}
             </div>
           </div>
         )}
-
-        {/* Mock 모드 안내 */}
-        <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <div className="flex items-start gap-3">
-            <svg
-              className="w-5 h-5 text-yellow-600 mt-0.5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-              />
-            </svg>
-            <div>
-              <p className="text-sm font-medium text-yellow-800">Mock 모드</p>
-              <p className="text-sm text-yellow-700">
-                테스트 결과는 실제로 저장되지 않습니다.
-              </p>
-            </div>
-          </div>
-        </div>
       </div>
     )
   }

@@ -1,8 +1,10 @@
 // Created: 2026-01-27 17:40:00
+// Updated: 2026-01-29 - Supabase 실제 연동, 게시글 연결 기능 추가
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { createClient } from '@/lib/supabase/client'
 
 type Category = '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개' | '추가_서비스_규칙'
 
@@ -14,6 +16,12 @@ interface Question {
   options: string[]
   correct_answer: number
   related_post_id: string | null
+}
+
+interface Post {
+  id: string
+  title: string
+  category: string
 }
 
 interface TestsContentProps {
@@ -29,17 +37,35 @@ const CATEGORIES: { value: Category; label: string }[] = [
 
 export default function TestsContent({ questions: initialQuestions }: TestsContentProps) {
   const [questions, setQuestions] = useState<Question[]>(initialQuestions)
+  const [posts, setPosts] = useState<Post[]>([])
   const [filterCategory, setFilterCategory] = useState<Category | 'all'>('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     category: '남자_매니저_대화' as Category,
     sub_category: '',
     question: '',
     options: ['', '', '', ''],
     correct_answer: 0,
+    related_post_id: null as string | null,
   })
+
+  const supabase = createClient()
+
+  // 게시글 목록 조회
+  useEffect(() => {
+    const fetchPosts = async () => {
+      const { data } = await supabase
+        .from('educational_posts')
+        .select('id, title, category')
+        .order('title')
+      setPosts(data || [])
+    }
+    fetchPosts()
+  }, [])
 
   // 필터링된 문제 목록
   const filteredQuestions = questions.filter((q) => {
@@ -77,12 +103,14 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
   // 모달 열기 (추가)
   const openAddModal = () => {
     setEditingQuestion(null)
+    setError(null)
     setFormData({
       category: '남자_매니저_대화',
       sub_category: '',
       question: '',
       options: ['', '', '', ''],
       correct_answer: 0,
+      related_post_id: null,
     })
     setShowModal(true)
   }
@@ -90,57 +118,113 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
   // 모달 열기 (수정)
   const openEditModal = (question: Question) => {
     setEditingQuestion(question)
+    setError(null)
     setFormData({
       category: question.category as Category,
       sub_category: question.sub_category || '',
       question: question.question,
       options: [...question.options],
       correct_answer: question.correct_answer,
+      related_post_id: question.related_post_id,
     })
     setShowModal(true)
+  }
+
+  // 카테고리 변경 시 관련 게시글 초기화
+  const handleCategoryChange = (newCategory: Category) => {
+    const currentPost = posts.find(p => p.id === formData.related_post_id)
+    setFormData({
+      ...formData,
+      category: newCategory,
+      related_post_id: currentPost?.category === newCategory ? formData.related_post_id : null
+    })
   }
 
   // 모달 닫기
   const closeModal = () => {
     setShowModal(false)
     setEditingQuestion(null)
+    setError(null)
   }
 
-  // 폼 제출
-  const handleSubmit = (e: React.FormEvent) => {
+  // 폼 제출 - Supabase에 저장
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setIsLoading(true)
+    setError(null)
 
-    if (editingQuestion) {
-      // 수정
-      setQuestions(
-        questions.map((q) =>
-          q.id === editingQuestion.id
-            ? {
-                ...q,
-                ...formData,
-                sub_category: formData.sub_category || null,
-              }
-            : q
+    try {
+      if (editingQuestion) {
+        // 수정
+        const { data, error: updateError } = await supabase
+          .from('test_questions')
+          .update({
+            category: formData.category,
+            sub_category: formData.sub_category || null,
+            question: formData.question,
+            options: formData.options,
+            correct_answer: formData.correct_answer,
+            related_post_id: formData.related_post_id,
+          })
+          .eq('id', editingQuestion.id)
+          .select()
+          .single()
+
+        if (updateError) throw updateError
+
+        setQuestions(
+          questions.map((q) =>
+            q.id === editingQuestion.id ? { ...data, options: data.options as string[] } : q
+          )
         )
-      )
-    } else {
-      // 추가
-      const newQuestion: Question = {
-        id: `new-${Date.now()}`,
-        ...formData,
-        sub_category: formData.sub_category || null,
-        related_post_id: null,
-      }
-      setQuestions([...questions, newQuestion])
-    }
+      } else {
+        // 추가
+        const { data, error: insertError } = await supabase
+          .from('test_questions')
+          .insert({
+            category: formData.category,
+            sub_category: formData.sub_category || null,
+            question: formData.question,
+            options: formData.options,
+            correct_answer: formData.correct_answer,
+            related_post_id: formData.related_post_id,
+          })
+          .select()
+          .single()
 
-    closeModal()
+        if (insertError) throw insertError
+
+        setQuestions([...questions, { ...data, options: data.options as string[] }])
+      }
+
+      closeModal()
+    } catch (err: any) {
+      console.error('Error saving question:', err)
+      setError(err.message || '저장 중 오류가 발생했습니다.')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  // 삭제
-  const handleDelete = (questionId: string) => {
-    if (confirm('정말 삭제하시겠습니까?')) {
+  // 삭제 - Supabase에서 삭제
+  const handleDelete = async (questionId: string) => {
+    if (!confirm('정말 삭제하시겠습니까?')) return
+
+    setIsLoading(true)
+    try {
+      const { error: deleteError } = await supabase
+        .from('test_questions')
+        .delete()
+        .eq('id', questionId)
+
+      if (deleteError) throw deleteError
+
       setQuestions(questions.filter((q) => q.id !== questionId))
+    } catch (err: any) {
+      console.error('Error deleting question:', err)
+      alert(err.message || '삭제 중 오류가 발생했습니다.')
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -360,9 +444,7 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
                   </label>
                   <select
                     value={formData.category}
-                    onChange={(e) =>
-                      setFormData({ ...formData, category: e.target.value as Category })
-                    }
+                    onChange={(e) => handleCategoryChange(e.target.value as Category)}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   >
                     {CATEGORIES.map((cat) => (
@@ -386,6 +468,33 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
                     placeholder="예: 기본 인사"
                   />
                 </div>
+              </div>
+
+              {/* 관련 교육 자료 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  관련 교육 자료
+                </label>
+                <select
+                  value={formData.related_post_id || ''}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      related_post_id: e.target.value || null
+                    })
+                  }
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                >
+                  <option value="">선택 안함</option>
+                  {posts
+                    .filter(p => p.category === formData.category)
+                    .map(post => (
+                      <option key={post.id} value={post.id}>{post.title}</option>
+                    ))}
+                </select>
+                <p className="mt-1 text-sm text-gray-500">
+                  같은 카테고리의 교육 자료만 표시됩니다. 오답 시 학습 링크로 제공됩니다.
+                </p>
               </div>
 
               {/* 문제 */}
@@ -435,19 +544,27 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
                 </p>
               </div>
 
+              {error && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-600">{error}</p>
+                </div>
+              )}
+
               <div className="flex gap-3 pt-4">
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  disabled={isLoading}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
                 >
                   취소
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                  disabled={isLoading}
+                  className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
                 >
-                  {editingQuestion ? '수정' : '추가'}
+                  {isLoading ? '저장 중...' : editingQuestion ? '수정' : '추가'}
                 </button>
               </div>
             </form>
@@ -455,31 +572,6 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
         </div>
       )}
 
-      {/* Mock 모드 안내 */}
-      <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-        <div className="flex items-start gap-3">
-          <svg
-            className="w-5 h-5 text-yellow-600 mt-0.5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-            />
-          </svg>
-          <div>
-            <p className="text-sm font-medium text-yellow-800">Mock 모드</p>
-            <p className="text-sm text-yellow-700">
-              현재 Supabase가 연결되지 않아 샘플 데이터를 표시하고 있습니다.
-              변경사항은 페이지 새로고침 시 초기화됩니다.
-            </p>
-          </div>
-        </div>
-      </div>
     </div>
   )
 }

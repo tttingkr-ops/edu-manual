@@ -32,7 +32,7 @@ export default async function EducationPage() {
   )
 
   // 게시물에 읽음 상태 추가
-  const postsWithReadStatus = (posts || []).map((post: { id: string; title: string; content: string; content_type: string; category: string; created_at: string }) => ({
+  const postsWithReadStatus = (posts || []).map((post) => ({
     ...post,
     isRead: readStatusMap.get(post.id) || false,
   }))
