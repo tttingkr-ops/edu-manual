@@ -1,10 +1,29 @@
 // Created: 2026-01-27 16:30:00
+// Updated: 2026-01-31 - Admin client for role check to bypass RLS
 // Next.js 미들웨어 - 인증 및 라우팅 처리
 import { NextResponse, type NextRequest } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 import { updateSession } from '@/lib/supabase/middleware'
 
+// Admin client for role lookup (bypasses RLS)
+function getAdminClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    return null
+  }
+
+  return createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  })
+}
+
 export async function middleware(request: NextRequest) {
-  const { response, user, supabase } = await updateSession(request)
+  const { response, user } = await updateSession(request)
   const { pathname } = request.nextUrl
 
   // 공개 경로 (로그인 필요 없음)
@@ -20,16 +39,21 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
+  // Admin client로 역할 조회 (RLS 우회)
+  const adminClient = getAdminClient()
+
   // 로그인한 경우
   if (isPublicPath && pathname === '/login') {
-    // 사용자 역할 조회
-    const { data: userData } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single()
+    let role = 'manager'
 
-    const role = userData?.role || 'manager'
+    if (adminClient) {
+      const { data: userData } = await adminClient
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+      role = userData?.role || 'manager'
+    }
 
     // 역할에 따라 리다이렉트
     if (role === 'admin') {
@@ -41,13 +65,18 @@ export async function middleware(request: NextRequest) {
 
   // 관리자 페이지 접근 권한 체크
   if (pathname.startsWith('/admin')) {
-    const { data: userData } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single()
+    let role = 'manager'
 
-    if (userData?.role !== 'admin') {
+    if (adminClient) {
+      const { data: userData } = await adminClient
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+      role = userData?.role || 'manager'
+    }
+
+    if (role !== 'admin') {
       return NextResponse.redirect(new URL('/manager/education', request.url))
     }
   }
