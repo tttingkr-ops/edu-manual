@@ -3,9 +3,14 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-})
+// 클라이언트를 런타임에 생성 (빌드 시점 오류 방지)
+function getAnthropicClient() {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) {
+    throw new Error('ANTHROPIC_API_KEY 환경 변수가 설정되지 않았습니다.')
+  }
+  return new Anthropic({ apiKey })
+}
 
 export interface GradingRequest {
   question: string
@@ -82,6 +87,7 @@ ${answerText}
         ]
       : userMessage
 
+    const anthropic = getAnthropicClient()
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1024,
