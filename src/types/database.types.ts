@@ -54,6 +54,7 @@ export interface Database {
           created_at: string;
           updated_at: string;
           author_id: string;
+          images: Json;
         };
         Insert: {
           id?: string;
@@ -64,6 +65,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
           author_id: string;
+          images?: Json;
         };
         Update: {
           id?: string;
@@ -74,6 +76,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
           author_id?: string;
+          images?: Json;
         };
         Relationships: [
           {
@@ -152,33 +155,133 @@ export interface Database {
           category: string;
           sub_category: string | null;
           question: string;
-          options: Json;
-          correct_answer: number;
+          options: Json | null;
+          correct_answer: number | null;
           related_post_id: string | null;
+          question_type: 'multiple_choice' | 'subjective';
+          max_score: number;
+          grading_criteria: string | null;
+          model_answer: string | null;
+          question_image_url: string | null;
         };
         Insert: {
           id?: string;
           category: string;
           sub_category?: string | null;
           question: string;
-          options: Json;
-          correct_answer: number;
+          options?: Json | null;
+          correct_answer?: number | null;
           related_post_id?: string | null;
+          question_type?: 'multiple_choice' | 'subjective';
+          max_score?: number;
+          grading_criteria?: string | null;
+          model_answer?: string | null;
+          question_image_url?: string | null;
         };
         Update: {
           id?: string;
           category?: string;
           sub_category?: string | null;
           question?: string;
-          options?: Json;
-          correct_answer?: number;
+          options?: Json | null;
+          correct_answer?: number | null;
           related_post_id?: string | null;
+          question_type?: 'multiple_choice' | 'subjective';
+          max_score?: number;
+          grading_criteria?: string | null;
+          model_answer?: string | null;
+          question_image_url?: string | null;
         };
         Relationships: [
           {
             foreignKeyName: 'test_questions_related_post_id_fkey';
             columns: ['related_post_id'];
             referencedRelation: 'educational_posts';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+      subjective_answers: {
+        Row: {
+          id: string;
+          question_id: string;
+          user_id: string;
+          test_result_id: string | null;
+          answer_text: string | null;
+          image_url: string | null;
+          image_path: string | null;
+          ai_score: number | null;
+          ai_feedback: string | null;
+          ai_graded_at: string | null;
+          admin_score: number | null;
+          admin_feedback: string | null;
+          admin_reviewed_at: string | null;
+          admin_reviewer_id: string | null;
+          final_score: number | null;
+          status: 'pending' | 'ai_graded' | 'admin_reviewed';
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          question_id: string;
+          user_id: string;
+          test_result_id?: string | null;
+          answer_text?: string | null;
+          image_url?: string | null;
+          image_path?: string | null;
+          ai_score?: number | null;
+          ai_feedback?: string | null;
+          ai_graded_at?: string | null;
+          admin_score?: number | null;
+          admin_feedback?: string | null;
+          admin_reviewed_at?: string | null;
+          admin_reviewer_id?: string | null;
+          final_score?: number | null;
+          status?: 'pending' | 'ai_graded' | 'admin_reviewed';
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          question_id?: string;
+          user_id?: string;
+          test_result_id?: string | null;
+          answer_text?: string | null;
+          image_url?: string | null;
+          image_path?: string | null;
+          ai_score?: number | null;
+          ai_feedback?: string | null;
+          ai_graded_at?: string | null;
+          admin_score?: number | null;
+          admin_feedback?: string | null;
+          admin_reviewed_at?: string | null;
+          admin_reviewer_id?: string | null;
+          final_score?: number | null;
+          status?: 'pending' | 'ai_graded' | 'admin_reviewed';
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'subjective_answers_question_id_fkey';
+            columns: ['question_id'];
+            referencedRelation: 'test_questions';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'subjective_answers_user_id_fkey';
+            columns: ['user_id'];
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'subjective_answers_test_result_id_fkey';
+            columns: ['test_result_id'];
+            referencedRelation: 'test_results';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'subjective_answers_admin_reviewer_id_fkey';
+            columns: ['admin_reviewer_id'];
+            referencedRelation: 'users';
             referencedColumns: ['id'];
           }
         ];

@@ -1,20 +1,40 @@
 // Created: 2026-01-27 17:35:00
-// Updated: 2026-01-29 - 테스트 결과 DB 저장 추가
+// Updated: 2026-02-01 - 주관식 문제 지원 및 AI 채점 연동
 'use client'
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+import ImageUpload from '@/components/ImageUpload'
 
 interface Question {
   id: string
   category: string
   sub_category: string | null
   question: string
-  options: string[]
-  correct_answer: number
+  question_type: 'multiple_choice' | 'subjective'
+  question_image_url: string | null
+  options: string[] | null
+  correct_answer: number | null
+  max_score: number
+  grading_criteria: string | null
+  model_answer: string | null
   related_post_id: string | null
+}
+
+interface SubjectiveAnswer {
+  text: string
+  imageUrl: string | null
+  imagePath: string | null
+}
+
+interface GradingResult {
+  score: number
+  maxScore: number
+  feedback: string
+  strengths: string[]
+  improvements: string[]
 }
 
 interface TestContentProps {
@@ -33,36 +53,115 @@ export default function TestContent({
   const router = useRouter()
   const supabase = createClient()
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [answers, setAnswers] = useState<(number | null)[]>(
+  const [multipleChoiceAnswers, setMultipleChoiceAnswers] = useState<(number | null)[]>(
     new Array(questions.length).fill(null)
   )
+  const [subjectiveAnswers, setSubjectiveAnswers] = useState<Record<string, SubjectiveAnswer>>({})
+  const [gradingResults, setGradingResults] = useState<Record<string, GradingResult>>({})
+  const [gradingInProgress, setGradingInProgress] = useState<Set<string>>(new Set())
   const [showResult, setShowResult] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
   const currentQuestion = questions[currentIndex]
-  const answeredCount = answers.filter((a) => a !== null).length
+  const isMultipleChoice = currentQuestion?.question_type === 'multiple_choice'
+
+  // 답변 완료 수 계산
+  const getAnsweredCount = () => {
+    let count = 0
+    questions.forEach((q, index) => {
+      if (q.question_type === 'multiple_choice') {
+        if (multipleChoiceAnswers[index] !== null) count++
+      } else {
+        const answer = subjectiveAnswers[q.id]
+        if (answer && (answer.text.trim() || answer.imageUrl)) count++
+      }
+    })
+    return count
+  }
+
+  const answeredCount = getAnsweredCount()
   const progress = (answeredCount / questions.length) * 100
 
-  // 답변 선택
-  const handleAnswer = (optionIndex: number) => {
-    const newAnswers = [...answers]
+  // 객관식 답변 선택
+  const handleMultipleChoiceAnswer = (optionIndex: number) => {
+    const newAnswers = [...multipleChoiceAnswers]
     newAnswers[currentIndex] = optionIndex
-    setAnswers(newAnswers)
+    setMultipleChoiceAnswers(newAnswers)
   }
 
-  // 이전 문제
+  // 주관식 텍스트 답변
+  const handleSubjectiveText = (questionId: string, text: string) => {
+    setSubjectiveAnswers(prev => ({
+      ...prev,
+      [questionId]: {
+        ...prev[questionId],
+        text,
+        imageUrl: prev[questionId]?.imageUrl || null,
+        imagePath: prev[questionId]?.imagePath || null,
+      }
+    }))
+  }
+
+  // 주관식 이미지 업로드
+  const handleImageUpload = (questionId: string, url: string, path: string) => {
+    setSubjectiveAnswers(prev => ({
+      ...prev,
+      [questionId]: {
+        ...prev[questionId],
+        text: prev[questionId]?.text || '',
+        imageUrl: url || null,
+        imagePath: path || null,
+      }
+    }))
+  }
+
+  // AI 채점 요청
+  const gradeSubjectiveAnswer = async (questionId: string) => {
+    const answer = subjectiveAnswers[questionId]
+    if (!answer || (!answer.text.trim() && !answer.imageUrl)) return
+
+    setGradingInProgress(prev => new Set(prev).add(questionId))
+
+    try {
+      const response = await fetch('/api/grade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          questionId,
+          answerText: answer.text,
+          imageUrl: answer.imageUrl,
+          userId,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('AI 채점 요청 실패')
+      }
+
+      const data = await response.json()
+      setGradingResults(prev => ({
+        ...prev,
+        [questionId]: data.result,
+      }))
+    } catch (error) {
+      console.error('Grading error:', error)
+    } finally {
+      setGradingInProgress(prev => {
+        const next = new Set(prev)
+        next.delete(questionId)
+        return next
+      })
+    }
+  }
+
+  // 이전/다음 문제
   const handlePrev = () => {
-    if (currentIndex > 0) {
-      setCurrentIndex(currentIndex - 1)
-    }
+    if (currentIndex > 0) setCurrentIndex(currentIndex - 1)
   }
 
-  // 다음 문제
   const handleNext = () => {
-    if (currentIndex < questions.length - 1) {
-      setCurrentIndex(currentIndex + 1)
-    }
+    if (currentIndex < questions.length - 1) setCurrentIndex(currentIndex + 1)
   }
 
   // 테스트 제출
@@ -76,21 +175,22 @@ export default function TestContent({
     setIsSubmitting(true)
     setSaveError(null)
 
-    // 결과 계산
-    const { correctCount, score } = calculateResult()
+    // 모든 주관식 문제 AI 채점 요청
+    const subjectiveQuestions = questions.filter(q => q.question_type === 'subjective')
+    const gradingPromises = subjectiveQuestions
+      .filter(q => {
+        const answer = subjectiveAnswers[q.id]
+        return answer && (answer.text.trim() || answer.imageUrl) && !gradingResults[q.id]
+      })
+      .map(q => gradeSubjectiveAnswer(q.id))
 
-    // 카테고리별 점수 계산
-    const categoryScores: Record<string, { correct: number; total: number }> = {}
-    questions.forEach((q, index) => {
-      const subCat = q.sub_category || '기타'
-      if (!categoryScores[subCat]) {
-        categoryScores[subCat] = { correct: 0, total: 0 }
-      }
-      categoryScores[subCat].total++
-      if (answers[index] === q.correct_answer) {
-        categoryScores[subCat].correct++
-      }
-    })
+    if (gradingPromises.length > 0) {
+      await Promise.all(gradingPromises)
+    }
+
+    // 결과 계산
+    const { correctCount, totalScore, maxTotalScore } = calculateResult()
+    const score = maxTotalScore > 0 ? Math.round((totalScore / maxTotalScore) * 100) : 0
 
     try {
       // DB에 결과 저장
@@ -100,7 +200,7 @@ export default function TestContent({
         score: score,
         correct_count: correctCount,
         total_count: questions.length,
-        category_scores: categoryScores,
+        category_scores: {},
         test_date: new Date().toISOString(),
       })
 
@@ -119,24 +219,57 @@ export default function TestContent({
   // 결과 계산
   const calculateResult = () => {
     let correctCount = 0
+    let totalScore = 0
+    let maxTotalScore = 0
     const wrongAnswers: { question: Question; userAnswer: number | null }[] = []
 
     questions.forEach((q, index) => {
-      if (answers[index] === q.correct_answer) {
-        correctCount++
+      if (q.question_type === 'multiple_choice') {
+        maxTotalScore += q.max_score
+        if (multipleChoiceAnswers[index] === q.correct_answer) {
+          correctCount++
+          totalScore += q.max_score
+        } else {
+          wrongAnswers.push({ question: q, userAnswer: multipleChoiceAnswers[index] })
+        }
       } else {
-        wrongAnswers.push({ question: q, userAnswer: answers[index] })
+        maxTotalScore += q.max_score
+        const grading = gradingResults[q.id]
+        if (grading) {
+          totalScore += grading.score
+          if (grading.score >= q.max_score * 0.6) {
+            correctCount++
+          }
+        }
       }
     })
 
-    const score = Math.round((correctCount / questions.length) * 100)
+    const score = maxTotalScore > 0 ? Math.round((totalScore / maxTotalScore) * 100) : 0
+    return { correctCount, score, wrongAnswers, totalScore, maxTotalScore }
+  }
 
-    return { correctCount, score, wrongAnswers }
+  // 문제가 없는 경우
+  if (questions.length === 0) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+          <div className="text-4xl mb-4">📭</div>
+          <h1 className="text-xl font-bold text-gray-900 mb-2">문제가 없습니다</h1>
+          <p className="text-gray-600 mb-6">해당 카테고리에 등록된 테스트 문제가 없습니다.</p>
+          <Link
+            href="/manager/test"
+            className="inline-flex px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+          >
+            테스트 목록으로
+          </Link>
+        </div>
+      </div>
+    )
   }
 
   // 결과 화면
   if (showResult) {
-    const { correctCount, score, wrongAnswers } = calculateResult()
+    const { correctCount, score, wrongAnswers, totalScore, maxTotalScore } = calculateResult()
 
     return (
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -144,33 +277,23 @@ export default function TestContent({
         <div className="bg-white rounded-xl border border-gray-200 p-8 text-center mb-6">
           <div
             className={`w-24 h-24 mx-auto rounded-full flex items-center justify-center text-4xl mb-4 ${
-              score >= 80
-                ? 'bg-green-100'
-                : score >= 60
-                ? 'bg-yellow-100'
-                : 'bg-red-100'
+              score >= 80 ? 'bg-green-100' : score >= 60 ? 'bg-yellow-100' : 'bg-red-100'
             }`}
           >
             {score >= 80 ? '🎉' : score >= 60 ? '👍' : '📚'}
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            테스트 완료!
-          </h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">테스트 완료!</h1>
           <p className="text-gray-600 mb-6">{categoryTitle}</p>
 
           <div
             className={`text-5xl font-bold mb-2 ${
-              score >= 80
-                ? 'text-green-600'
-                : score >= 60
-                ? 'text-yellow-600'
-                : 'text-red-600'
+              score >= 80 ? 'text-green-600' : score >= 60 ? 'text-yellow-600' : 'text-red-600'
             }`}
           >
             {score}점
           </div>
           <p className="text-gray-500">
-            {questions.length}문제 중 {correctCount}문제 정답
+            총 {maxTotalScore}점 중 {totalScore}점 획득 ({correctCount}/{questions.length} 문제)
           </p>
 
           <div className="mt-6 flex items-center justify-center gap-4">
@@ -184,7 +307,9 @@ export default function TestContent({
               onClick={() => {
                 setShowResult(false)
                 setCurrentIndex(0)
-                setAnswers(new Array(questions.length).fill(null))
+                setMultipleChoiceAnswers(new Array(questions.length).fill(null))
+                setSubjectiveAnswers({})
+                setGradingResults({})
                 setIsSubmitting(false)
               }}
               className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
@@ -194,23 +319,20 @@ export default function TestContent({
           </div>
         </div>
 
-        {/* 틀린 문제 리뷰 */}
+        {/* 객관식 오답 노트 */}
         {wrongAnswers.length > 0 && (
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              오답 노트 ({wrongAnswers.length}문제)
+              객관식 오답 노트 ({wrongAnswers.length}문제)
             </h2>
             <div className="space-y-4">
               {wrongAnswers.map(({ question, userAnswer }, index) => (
-                <div
-                  key={question.id}
-                  className="p-4 bg-red-50 border border-red-100 rounded-lg"
-                >
+                <div key={question.id} className="p-4 bg-red-50 border border-red-100 rounded-lg">
                   <p className="font-medium text-gray-900 mb-3">
                     {index + 1}. {question.question}
                   </p>
                   <div className="space-y-2 text-sm">
-                    {question.options.map((option, optIndex) => (
+                    {question.options?.map((option, optIndex) => (
                       <div
                         key={optIndex}
                         className={`p-2 rounded ${
@@ -227,47 +349,75 @@ export default function TestContent({
                       </div>
                     ))}
                   </div>
-
-                  {/* 관련 교육 자료 링크 */}
-                  {question.related_post_id && (
-                    <Link
-                      href={`/manager/education/${question.related_post_id}`}
-                      className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-primary-100 text-primary-700 rounded-lg hover:bg-primary-200 transition-colors"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                      </svg>
-                      관련 교육 자료 다시 보기
-                    </Link>
-                  )}
                 </div>
               ))}
             </div>
           </div>
         )}
-      </div>
-    )
-  }
 
-  // 문제가 없는 경우
-  if (questions.length === 0) {
-    return (
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-          <div className="text-4xl mb-4">📭</div>
-          <h1 className="text-xl font-bold text-gray-900 mb-2">
-            문제가 없습니다
-          </h1>
-          <p className="text-gray-600 mb-6">
-            해당 카테고리에 등록된 테스트 문제가 없습니다.
-          </p>
-          <Link
-            href="/manager/test"
-            className="inline-flex px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-          >
-            테스트 목록으로
-          </Link>
-        </div>
+        {/* 주관식 결과 */}
+        {questions.filter(q => q.question_type === 'subjective').length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              주관식 AI 채점 결과
+            </h2>
+            <div className="space-y-4">
+              {questions
+                .filter(q => q.question_type === 'subjective')
+                .map((question) => {
+                  const result = gradingResults[question.id]
+                  const answer = subjectiveAnswers[question.id]
+
+                  return (
+                    <div key={question.id} className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                      <p className="font-medium text-gray-900 mb-2">{question.question}</p>
+
+                      {/* 내 답변 */}
+                      <div className="mb-3 p-3 bg-white rounded border">
+                        <p className="text-sm text-gray-500 mb-1">내 답변:</p>
+                        <p className="text-gray-800 whitespace-pre-wrap">{answer?.text || '(답변 없음)'}</p>
+                        {answer?.imageUrl && (
+                          <img src={answer.imageUrl} alt="첨부 이미지" className="mt-2 max-h-40 rounded" />
+                        )}
+                      </div>
+
+                      {/* 채점 결과 */}
+                      {result ? (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-2xl font-bold text-primary-600">
+                              {result.score}/{result.maxScore}점
+                            </span>
+                          </div>
+                          <p className="text-gray-700">{result.feedback}</p>
+
+                          {result.strengths.length > 0 && (
+                            <div className="mt-2">
+                              <p className="text-sm font-medium text-green-700">잘한 점:</p>
+                              <ul className="list-disc list-inside text-sm text-green-600">
+                                {result.strengths.map((s, i) => <li key={i}>{s}</li>)}
+                              </ul>
+                            </div>
+                          )}
+
+                          {result.improvements.length > 0 && (
+                            <div className="mt-2">
+                              <p className="text-sm font-medium text-amber-700">개선할 점:</p>
+                              <ul className="list-disc list-inside text-sm text-amber-600">
+                                {result.improvements.map((s, i) => <li key={i}>{s}</li>)}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-500">채점 결과 없음</p>
+                      )}
+                    </div>
+                  )
+                })}
+            </div>
+          </div>
+        )}
       </div>
     )
   }
@@ -286,17 +436,13 @@ export default function TestContent({
           </svg>
           나가기
         </Link>
-        <div className="text-sm text-gray-500">
-          {categoryTitle}
-        </div>
+        <div className="text-sm text-gray-500">{categoryTitle}</div>
       </div>
 
       {/* 진행률 */}
       <div className="mb-6">
         <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
-          <span>
-            {currentIndex + 1} / {questions.length} 문제
-          </span>
+          <span>{currentIndex + 1} / {questions.length} 문제</span>
           <span>{answeredCount}문제 답변 완료</span>
         </div>
         <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
@@ -309,64 +455,171 @@ export default function TestContent({
 
       {/* 문제 카드 */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-        {/* 카테고리 태그 */}
-        {currentQuestion.sub_category && (
-          <span className="inline-block px-3 py-1 bg-gray-100 text-gray-600 text-sm rounded-full mb-4">
-            {currentQuestion.sub_category}
+        {/* 문제 유형 태그 */}
+        <div className="flex items-center gap-2 mb-4">
+          <span className={`inline-block px-3 py-1 text-sm rounded-full ${
+            isMultipleChoice
+              ? 'bg-blue-100 text-blue-700'
+              : 'bg-purple-100 text-purple-700'
+          }`}>
+            {isMultipleChoice ? '객관식' : '주관식'}
           </span>
-        )}
+          <span className="text-sm text-gray-500">
+            {currentQuestion.max_score}점
+          </span>
+          {currentQuestion.sub_category && (
+            <span className="inline-block px-3 py-1 bg-gray-100 text-gray-600 text-sm rounded-full">
+              {currentQuestion.sub_category}
+            </span>
+          )}
+        </div>
 
         {/* 문제 */}
-        <h2 className="text-lg font-semibold text-gray-900 mb-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">
           Q{currentIndex + 1}. {currentQuestion.question}
         </h2>
 
-        {/* 선택지 */}
-        <div className="space-y-3">
-          {currentQuestion.options.map((option, index) => (
-            <button
-              key={index}
-              onClick={() => handleAnswer(index)}
-              className={`w-full p-4 text-left rounded-lg border-2 transition-all ${
-                answers[currentIndex] === index
-                  ? 'border-primary-500 bg-primary-50 text-primary-900'
-                  : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <span
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                    answers[currentIndex] === index
-                      ? 'bg-primary-500 text-white'
-                      : 'bg-gray-100 text-gray-600'
-                  }`}
-                >
-                  {index + 1}
-                </span>
-                <span>{option}</span>
+        {/* 문제 이미지 */}
+        {currentQuestion.question_image_url && (
+          <div className="mb-6">
+            <img
+              src={currentQuestion.question_image_url}
+              alt="문제 상황 이미지"
+              className="max-w-full rounded-lg border border-gray-200 shadow-sm"
+            />
+            <p className="text-sm text-gray-500 mt-2 text-center">위 상황을 보고 답변해주세요.</p>
+          </div>
+        )}
+
+        {/* 객관식 선택지 */}
+        {isMultipleChoice && currentQuestion.options && (
+          <div className="space-y-3">
+            {currentQuestion.options.map((option, index) => (
+              <button
+                key={index}
+                onClick={() => handleMultipleChoiceAnswer(index)}
+                className={`w-full p-4 text-left rounded-lg border-2 transition-all ${
+                  multipleChoiceAnswers[currentIndex] === index
+                    ? 'border-primary-500 bg-primary-50 text-primary-900'
+                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                      multipleChoiceAnswers[currentIndex] === index
+                        ? 'bg-primary-500 text-white'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}
+                  >
+                    {index + 1}
+                  </span>
+                  <span>{option}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* 주관식 답변 */}
+        {!isMultipleChoice && (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                답변 작성
+              </label>
+              <textarea
+                value={subjectiveAnswers[currentQuestion.id]?.text || ''}
+                onChange={(e) => handleSubjectiveText(currentQuestion.id, e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none"
+                rows={6}
+                placeholder="답변을 입력하세요..."
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                이미지 첨부 (선택)
+              </label>
+              <p className="text-sm text-gray-500 mb-2">
+                카카오톡 대화 캡처 등 참고 이미지를 첨부할 수 있습니다.
+              </p>
+              <ImageUpload
+                onUpload={(url, path) => handleImageUpload(currentQuestion.id, url, path)}
+                maxSizeMB={5}
+                folder={`answers/${currentQuestion.id}`}
+              />
+            </div>
+
+            {/* AI 채점 버튼 */}
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => gradeSubjectiveAnswer(currentQuestion.id)}
+                disabled={
+                  gradingInProgress.has(currentQuestion.id) ||
+                  (!subjectiveAnswers[currentQuestion.id]?.text.trim() &&
+                    !subjectiveAnswers[currentQuestion.id]?.imageUrl)
+                }
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {gradingInProgress.has(currentQuestion.id) ? (
+                  <>
+                    <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                    </svg>
+                    AI 채점 중...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                    AI 미리 채점
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* AI 채점 결과 미리보기 */}
+            {gradingResults[currentQuestion.id] && (
+              <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-lg font-bold text-purple-700">
+                    AI 예상 점수: {gradingResults[currentQuestion.id].score}/{gradingResults[currentQuestion.id].maxScore}점
+                  </span>
+                </div>
+                <p className="text-gray-700 text-sm">{gradingResults[currentQuestion.id].feedback}</p>
               </div>
-            </button>
-          ))}
-        </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 문제 네비게이션 */}
       <div className="flex flex-wrap gap-2 mb-6">
-        {questions.map((_, index) => (
-          <button
-            key={index}
-            onClick={() => setCurrentIndex(index)}
-            className={`w-10 h-10 rounded-lg text-sm font-medium transition-colors ${
-              index === currentIndex
-                ? 'bg-primary-600 text-white'
-                : answers[index] !== null
-                ? 'bg-green-100 text-green-800'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            {index + 1}
-          </button>
-        ))}
+        {questions.map((q, index) => {
+          const isAnswered = q.question_type === 'multiple_choice'
+            ? multipleChoiceAnswers[index] !== null
+            : !!(subjectiveAnswers[q.id]?.text.trim() || subjectiveAnswers[q.id]?.imageUrl)
+
+          return (
+            <button
+              key={index}
+              onClick={() => setCurrentIndex(index)}
+              className={`w-10 h-10 rounded-lg text-sm font-medium transition-colors ${
+                index === currentIndex
+                  ? 'bg-primary-600 text-white'
+                  : isAnswered
+                  ? 'bg-green-100 text-green-800'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {index + 1}
+            </button>
+          )
+        })}
       </div>
 
       {/* 하단 버튼 */}
@@ -385,9 +638,19 @@ export default function TestContent({
         <button
           onClick={handleSubmit}
           disabled={isSubmitting}
-          className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+          className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center gap-2"
         >
-          제출하기
+          {isSubmitting ? (
+            <>
+              <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+              </svg>
+              채점 중...
+            </>
+          ) : (
+            '제출하기'
+          )}
         </button>
 
         <button

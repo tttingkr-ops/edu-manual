@@ -1,11 +1,14 @@
 // Created: 2026-01-27 17:20:00
-// Updated: 2026-01-29 - Supabase 실제 연동, 그룹 선택 UI 추가
+// Updated: 2026-02-01 - 테스트 문제 추가 기능 (객관식/주관식 지원)
+// Updated: 2026-02-03 - 마크다운 에디터 드래그앤드랍 이미지 업로드 지원
 'use client'
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+import QuestionBuilder, { QuestionData } from '@/components/QuestionBuilder'
+import MarkdownEditor from '@/components/MarkdownEditor'
 
 type ContentType = 'video' | 'document'
 type Category = '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개' | '추가_서비스_규칙'
@@ -30,6 +33,9 @@ export default function NewPostPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedGroups, setSelectedGroups] = useState<GroupName[]>([])
+  const [includeTest, setIncludeTest] = useState(false)
+  const [questions, setQuestions] = useState<QuestionData[]>([])
+  const [uploadedImages, setUploadedImages] = useState<string[]>([])
   const [formData, setFormData] = useState({
     title: '',
     content_type: 'document' as ContentType,
@@ -55,6 +61,24 @@ export default function NewPostPage() {
       // 그룹 선택 검증
       if (selectedGroups.length === 0) {
         throw new Error('대상 그룹을 최소 1개 이상 선택해주세요.')
+      }
+
+      // 테스트 문제 검증
+      if (includeTest && questions.length > 0) {
+        for (const q of questions) {
+          if (!q.question.trim()) {
+            throw new Error('모든 문제의 내용을 입력해주세요.')
+          }
+          if (q.question_type === 'multiple_choice') {
+            if (!q.options || q.options.some(opt => !opt.trim())) {
+              throw new Error('객관식 문제의 모든 선택지를 입력해주세요.')
+            }
+          } else if (q.question_type === 'subjective') {
+            if (!q.grading_criteria?.trim()) {
+              throw new Error('주관식 문제의 채점 기준을 입력해주세요.')
+            }
+          }
+        }
       }
 
       // 현재 로그인한 사용자 정보 가져오기
@@ -93,6 +117,32 @@ export default function NewPostPage() {
         // 롤백: 게시물 삭제
         await supabase.from('educational_posts').delete().eq('id', data.id)
         throw groupError
+      }
+
+      // 테스트 문제 저장
+      if (includeTest && questions.length > 0) {
+        const questionInserts = questions.map(q => ({
+          category: formData.category,
+          sub_category: null,
+          question: q.question,
+          question_type: q.question_type,
+          question_image_url: q.question_image_url,
+          options: q.question_type === 'multiple_choice' ? q.options : null,
+          correct_answer: q.question_type === 'multiple_choice' ? q.correct_answer : null,
+          max_score: q.max_score,
+          grading_criteria: q.grading_criteria,
+          model_answer: q.model_answer,
+          related_post_id: data.id,
+        }))
+
+        const { error: questionError } = await supabase
+          .from('test_questions')
+          .insert(questionInserts)
+
+        if (questionError) {
+          console.error('Question insert error:', questionError)
+          // 문제 저장 실패해도 게시물은 유지 (경고만 표시)
+        }
       }
 
       router.push('/admin/posts')
@@ -327,14 +377,12 @@ export default function NewPostPage() {
             </div>
           ) : (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
                 내용 (마크다운) <span className="text-red-500">*</span>
               </label>
-              <textarea
+              <MarkdownEditor
                 value={formData.content}
-                onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 font-mono text-sm"
-                rows={15}
+                onChange={(content) => setFormData({ ...formData, content })}
                 placeholder={`# 제목
 
 ## 소제목
@@ -344,13 +392,76 @@ export default function NewPostPage() {
 - 목록 항목 1
 - 목록 항목 2
 
-**굵은 글씨**, *기울임 글씨*`}
-                required
+**굵은 글씨**, *기울임 글씨*
+
+이미지를 드래그하거나 붙여넣어 추가하세요.`}
+                rows={15}
+                onImageUpload={(url) => setUploadedImages(prev => [...prev, url])}
               />
-              <p className="mt-2 text-sm text-gray-500">
-                마크다운 문법을 사용할 수 있습니다. (제목: #, 목록: -, 굵게: **텍스트**)
+            </div>
+          )}
+        </div>
+
+        {/* 테스트 문제 섹션 */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">테스트 문제</h2>
+              <p className="text-sm text-gray-500">
+                이 교육 자료와 연결된 테스트 문제를 추가합니다.
               </p>
             </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={includeTest}
+                onChange={(e) => setIncludeTest(e.target.checked)}
+                className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+              />
+              <span className="text-sm font-medium text-gray-700">테스트 추가</span>
+            </label>
+          </div>
+
+          {includeTest && (
+            <>
+              {/* 업로드된 이미지에서 선택 */}
+              {uploadedImages.length > 0 && (
+                <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm font-medium text-blue-800 mb-2">
+                    교육 자료에 업로드된 이미지를 문제에 사용할 수 있습니다
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {uploadedImages.map((url, index) => (
+                      <div key={index} className="relative group">
+                        <img
+                          src={url}
+                          alt={`업로드 이미지 ${index + 1}`}
+                          className="w-20 h-20 object-cover rounded border border-blue-300"
+                        />
+                        <div className="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity rounded flex items-center justify-center">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(url)
+                              alert('이미지 URL이 복사되었습니다. 문제 이미지에 붙여넣기 하세요.')
+                            }}
+                            className="text-xs text-white bg-blue-600 px-2 py-1 rounded"
+                          >
+                            URL 복사
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <QuestionBuilder
+                questions={questions}
+                onChange={setQuestions}
+                category={formData.category}
+              />
+            </>
           )}
         </div>
 

@@ -1,10 +1,15 @@
 // Created: 2026-01-27 17:40:00
 // Updated: 2026-01-29 - Supabase 실제 연동, 게시글 연결 기능 추가
+// Updated: 2026-02-02 - 문제 이미지 업로드 기능 추가
+// Updated: 2026-02-03 - 성능 최적화 (페이지네이션, useMemo, useCallback)
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+import ImageUpload from '@/components/ImageUpload'
+
+const ITEMS_PER_PAGE = 20
 
 type Category = '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개' | '추가_서비스_규칙'
 
@@ -13,8 +18,13 @@ interface Question {
   category: string
   sub_category: string | null
   question: string
-  options: string[]
-  correct_answer: number
+  question_type: 'multiple_choice' | 'subjective'
+  question_image_url: string | null
+  options: string[] | null
+  correct_answer: number | null
+  max_score: number
+  grading_criteria: string | null
+  model_answer: string | null
   related_post_id: string | null
 }
 
@@ -40,6 +50,7 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
   const [posts, setPosts] = useState<Post[]>([])
   const [filterCategory, setFilterCategory] = useState<Category | 'all'>('all')
   const [searchTerm, setSearchTerm] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
   const [showModal, setShowModal] = useState(false)
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -48,8 +59,13 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
     category: '남자_매니저_대화' as Category,
     sub_category: '',
     question: '',
+    question_type: 'multiple_choice' as 'multiple_choice' | 'subjective',
+    question_image_url: '' as string,
     options: ['', '', '', ''],
     correct_answer: 0,
+    max_score: 10,
+    grading_criteria: '',
+    model_answer: '',
     related_post_id: null as string | null,
   })
 
@@ -67,17 +83,40 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
     fetchPosts()
   }, [])
 
-  // 필터링된 문제 목록
-  const filteredQuestions = questions.filter((q) => {
-    const matchesCategory = filterCategory === 'all' || q.category === filterCategory
-    const matchesSearch = q.question.toLowerCase().includes(searchTerm.toLowerCase())
-    return matchesCategory && matchesSearch
-  })
+  // 필터링된 문제 목록 (useMemo로 최적화)
+  const filteredQuestions = useMemo(() => {
+    return questions.filter((q) => {
+      const matchesCategory = filterCategory === 'all' || q.category === filterCategory
+      const matchesSearch = q.question.toLowerCase().includes(searchTerm.toLowerCase())
+      return matchesCategory && matchesSearch
+    })
+  }, [questions, filterCategory, searchTerm])
 
-  // 카테고리별 문제 수
-  const getCategoryCount = (category: string) => {
-    return questions.filter((q) => q.category === category).length
-  }
+  // 페이지네이션 적용된 문제 목록
+  const paginatedQuestions = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
+    return filteredQuestions.slice(startIndex, startIndex + ITEMS_PER_PAGE)
+  }, [filteredQuestions, currentPage])
+
+  const totalPages = Math.ceil(filteredQuestions.length / ITEMS_PER_PAGE)
+
+  // 필터 변경 시 페이지 초기화
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [filterCategory, searchTerm])
+
+  // 카테고리별 문제 수 (useMemo로 최적화)
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    CATEGORIES.forEach(cat => {
+      counts[cat.value] = questions.filter(q => q.category === cat.value).length
+    })
+    return counts
+  }, [questions])
+
+  const getCategoryCount = useCallback((category: string) => {
+    return categoryCounts[category] || 0
+  }, [categoryCounts])
 
   // 카테고리 라벨
   const getCategoryLabel = (category: string) => {
@@ -108,8 +147,13 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
       category: '남자_매니저_대화',
       sub_category: '',
       question: '',
+      question_type: 'multiple_choice',
+      question_image_url: '',
       options: ['', '', '', ''],
       correct_answer: 0,
+      max_score: 10,
+      grading_criteria: '',
+      model_answer: '',
       related_post_id: null,
     })
     setShowModal(true)
@@ -123,8 +167,13 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
       category: question.category as Category,
       sub_category: question.sub_category || '',
       question: question.question,
-      options: [...question.options],
-      correct_answer: question.correct_answer,
+      question_type: question.question_type,
+      question_image_url: question.question_image_url || '',
+      options: question.options ? [...question.options] : ['', '', '', ''],
+      correct_answer: question.correct_answer ?? 0,
+      max_score: question.max_score,
+      grading_criteria: question.grading_criteria || '',
+      model_answer: question.model_answer || '',
       related_post_id: question.related_post_id,
     })
     setShowModal(true)
@@ -154,18 +203,25 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
     setError(null)
 
     try {
+      const questionData = {
+        category: formData.category,
+        sub_category: formData.sub_category || null,
+        question: formData.question,
+        question_type: formData.question_type,
+        question_image_url: formData.question_image_url || null,
+        options: formData.question_type === 'multiple_choice' ? formData.options : null,
+        correct_answer: formData.question_type === 'multiple_choice' ? formData.correct_answer : null,
+        max_score: formData.max_score,
+        grading_criteria: formData.question_type === 'subjective' ? formData.grading_criteria || null : null,
+        model_answer: formData.question_type === 'subjective' ? formData.model_answer || null : null,
+        related_post_id: formData.related_post_id,
+      }
+
       if (editingQuestion) {
         // 수정
         const { data, error: updateError } = await supabase
           .from('test_questions')
-          .update({
-            category: formData.category,
-            sub_category: formData.sub_category || null,
-            question: formData.question,
-            options: formData.options,
-            correct_answer: formData.correct_answer,
-            related_post_id: formData.related_post_id,
-          })
+          .update(questionData)
           .eq('id', editingQuestion.id)
           .select()
           .single()
@@ -174,27 +230,20 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
 
         setQuestions(
           questions.map((q) =>
-            q.id === editingQuestion.id ? { ...data, options: data.options as string[] } : q
+            q.id === editingQuestion.id ? { ...data, options: data.options as string[] | null } : q
           )
         )
       } else {
         // 추가
         const { data, error: insertError } = await supabase
           .from('test_questions')
-          .insert({
-            category: formData.category,
-            sub_category: formData.sub_category || null,
-            question: formData.question,
-            options: formData.options,
-            correct_answer: formData.correct_answer,
-            related_post_id: formData.related_post_id,
-          })
+          .insert(questionData)
           .select()
           .single()
 
         if (insertError) throw insertError
 
-        setQuestions([...questions, { ...data, options: data.options as string[] }])
+        setQuestions([...questions, { ...data, options: data.options as string[] | null }])
       }
 
       closeModal()
@@ -329,45 +378,71 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
       {/* 문제 목록 */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         {filteredQuestions.length > 0 ? (
-          <div className="divide-y divide-gray-200">
-            {filteredQuestions.map((question, index) => (
-              <div key={question.id} className="p-4 hover:bg-gray-50">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span
-                        className={`px-2 py-0.5 text-xs font-medium rounded-full ${getCategoryBadgeClass(
-                          question.category
-                        )}`}
-                      >
-                        {getCategoryLabel(question.category)}
-                      </span>
-                      {question.sub_category && (
-                        <span className="text-xs text-gray-500">
-                          {question.sub_category}
-                        </span>
-                      )}
-                    </div>
-                    <p className="font-medium text-gray-900 mb-2">
-                      {question.question}
-                    </p>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      {question.options.map((option, optIndex) => (
-                        <div
-                          key={optIndex}
-                          className={`p-2 rounded ${
-                            optIndex === question.correct_answer
-                              ? 'bg-green-50 text-green-800 border border-green-200'
-                              : 'bg-gray-50 text-gray-600'
-                          }`}
+          <>
+            {/* 결과 요약 */}
+            <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 text-sm text-gray-600">
+              총 {filteredQuestions.length}개 문제 중 {(currentPage - 1) * ITEMS_PER_PAGE + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, filteredQuestions.length)}개 표시
+            </div>
+
+            <div className="divide-y divide-gray-200">
+              {paginatedQuestions.map((question, index) => (
+                <div key={question.id} className="p-4 hover:bg-gray-50">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span
+                          className={`px-2 py-0.5 text-xs font-medium rounded-full ${getCategoryBadgeClass(
+                            question.category
+                          )}`}
                         >
-                          {optIndex + 1}. {option}
-                          {optIndex === question.correct_answer && (
-                            <span className="ml-2 text-green-600">✓</span>
-                          )}
+                          {getCategoryLabel(question.category)}
+                        </span>
+                        {question.sub_category && (
+                          <span className="text-xs text-gray-500">
+                            {question.sub_category}
+                          </span>
+                        )}
+                      </div>
+                      <p className="font-medium text-gray-900 mb-2">
+                        {question.question}
+                      </p>
+                      {question.question_image_url && (
+                        <div className="mb-2">
+                          <img
+                            src={question.question_image_url}
+                            alt="문제 이미지"
+                            loading="lazy"
+                            className="max-h-24 rounded border"
+                          />
                         </div>
-                      ))}
-                    </div>
+                      )}
+                    {question.question_type === 'subjective' ? (
+                      <div className="p-3 bg-purple-50 rounded border border-purple-200">
+                        <span className="text-sm text-purple-700 font-medium">주관식 문제</span>
+                        <p className="text-sm text-gray-600 mt-1">배점: {question.max_score}점</p>
+                        {question.grading_criteria && (
+                          <p className="text-sm text-gray-500 mt-1">채점기준: {question.grading_criteria}</p>
+                        )}
+                      </div>
+                    ) : question.options && (
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        {question.options.map((option, optIndex) => (
+                          <div
+                            key={optIndex}
+                            className={`p-2 rounded ${
+                              optIndex === question.correct_answer
+                                ? 'bg-green-50 text-green-800 border border-green-200'
+                                : 'bg-gray-50 text-gray-600'
+                            }`}
+                          >
+                            {optIndex + 1}. {option}
+                            {optIndex === question.correct_answer && (
+                              <span className="ml-2 text-green-600">✓</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-1">
                     <button
@@ -402,7 +477,53 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
                 </div>
               </div>
             ))}
-          </div>
+            </div>
+
+            {/* 페이지네이션 */}
+            {totalPages > 1 && (
+              <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  이전
+                </button>
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum
+                  if (totalPages <= 5) {
+                    pageNum = i + 1
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i
+                  } else {
+                    pageNum = currentPage - 2 + i
+                  }
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`px-3 py-1 text-sm rounded ${
+                        currentPage === pageNum
+                          ? 'bg-primary-600 text-white'
+                          : 'border hover:bg-gray-50'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  )
+                })}
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  다음
+                </button>
+              </div>
+            )}
+          </>
         ) : (
           <div className="p-12 text-center text-gray-500">
             {searchTerm || filterCategory !== 'all'
@@ -497,6 +618,49 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
                 </p>
               </div>
 
+              {/* 문제 유형 선택 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  문제 유형 <span className="text-red-500">*</span>
+                </label>
+                <div className="flex gap-4">
+                  <label className={`flex-1 flex items-center gap-2 p-3 border-2 rounded-lg cursor-pointer transition-colors ${
+                    formData.question_type === 'multiple_choice'
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="question_type"
+                      checked={formData.question_type === 'multiple_choice'}
+                      onChange={() => setFormData({ ...formData, question_type: 'multiple_choice' })}
+                      className="sr-only"
+                    />
+                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span className="font-medium">객관식 (4지선다)</span>
+                  </label>
+                  <label className={`flex-1 flex items-center gap-2 p-3 border-2 rounded-lg cursor-pointer transition-colors ${
+                    formData.question_type === 'subjective'
+                      ? 'border-purple-500 bg-purple-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="question_type"
+                      checked={formData.question_type === 'subjective'}
+                      onChange={() => setFormData({ ...formData, question_type: 'subjective' })}
+                      className="sr-only"
+                    />
+                    <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    <span className="font-medium">주관식 (AI 채점)</span>
+                  </label>
+                </div>
+              </div>
+
               {/* 문제 */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -512,37 +676,123 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
                 />
               </div>
 
-              {/* 선택지 */}
+              {/* 문제 이미지 */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  선택지 <span className="text-red-500">*</span>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  문제 이미지 (선택)
                 </label>
-                <div className="space-y-2">
-                  {formData.options.map((option, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name="correct_answer"
-                        checked={formData.correct_answer === index}
-                        onChange={() => setFormData({ ...formData, correct_answer: index })}
-                        className="w-4 h-4 text-primary-600"
-                      />
-                      <span className="w-6 text-sm text-gray-500">{index + 1}.</span>
-                      <input
-                        type="text"
-                        value={option}
-                        onChange={(e) => handleOptionChange(index, e.target.value)}
-                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        placeholder={`선택지 ${index + 1}`}
-                        required
-                      />
-                    </div>
-                  ))}
-                </div>
-                <p className="mt-2 text-sm text-gray-500">
-                  라디오 버튼을 클릭하여 정답을 선택하세요.
+                <p className="text-sm text-gray-500 mb-2">
+                  카카오톡 대화 캡처 등 상황 이미지를 첨부하면 &quot;위 상황에서 올바른 응대 방법은?&quot; 형식의 문제를 만들 수 있습니다.
                 </p>
+                {formData.question_image_url ? (
+                  <div className="relative inline-block">
+                    <img
+                      src={formData.question_image_url}
+                      alt="문제 이미지"
+                      className="max-h-40 rounded-lg border"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, question_image_url: '' })}
+                      className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ) : (
+                  <ImageUpload
+                    onUpload={(url) => setFormData({ ...formData, question_image_url: url })}
+                    maxSizeMB={10}
+                    bucket="education-images"
+                    folder={`questions/${formData.category}`}
+                  />
+                )}
               </div>
+
+              {/* 배점 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  배점
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={formData.max_score}
+                    onChange={(e) => setFormData({ ...formData, max_score: parseInt(e.target.value) || 10 })}
+                    className="w-24 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    min={1}
+                    max={100}
+                  />
+                  <span className="text-sm text-gray-500">점</span>
+                </div>
+              </div>
+
+              {/* 객관식 선택지 */}
+              {formData.question_type === 'multiple_choice' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    선택지 <span className="text-red-500">*</span>
+                  </label>
+                  <div className="space-y-2">
+                    {formData.options.map((option, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="correct_answer"
+                          checked={formData.correct_answer === index}
+                          onChange={() => setFormData({ ...formData, correct_answer: index })}
+                          className="w-4 h-4 text-primary-600"
+                        />
+                        <span className="w-6 text-sm text-gray-500">{index + 1}.</span>
+                        <input
+                          type="text"
+                          value={option}
+                          onChange={(e) => handleOptionChange(index, e.target.value)}
+                          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          placeholder={`선택지 ${index + 1}`}
+                          required
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-sm text-gray-500">
+                    라디오 버튼을 클릭하여 정답을 선택하세요.
+                  </p>
+                </div>
+              )}
+
+              {/* 주관식 옵션 */}
+              {formData.question_type === 'subjective' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      채점 기준 <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      value={formData.grading_criteria}
+                      onChange={(e) => setFormData({ ...formData, grading_criteria: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      rows={3}
+                      placeholder="AI가 채점할 때 참고할 기준을 입력하세요. 예: 공감 표현 포함 여부, 해결책 제시 여부, 적절한 어조 사용 등"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      모범 답안
+                    </label>
+                    <textarea
+                      value={formData.model_answer}
+                      onChange={(e) => setFormData({ ...formData, model_answer: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      rows={4}
+                      placeholder="모범 답안을 입력하세요. AI가 채점 시 참고합니다."
+                    />
+                  </div>
+                </>
+              )}
 
               {error && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-lg">

@@ -1,5 +1,5 @@
 // Created: 2026-01-27 17:35:00
-// Updated: 2026-01-29 - Supabase 연동, Mock 제거
+// Updated: 2026-02-01 - 주관식 문제 지원 (question_type, max_score 등 추가)
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import TestContent from './TestContent'
@@ -26,8 +26,13 @@ export default async function TestPage({ params }: PageProps) {
     category: string
     sub_category: string | null
     question: string
-    options: string[]
-    correct_answer: number
+    question_type: 'multiple_choice' | 'subjective'
+    question_image_url: string | null
+    options: string[] | null
+    correct_answer: number | null
+    max_score: number
+    grading_criteria: string | null
+    model_answer: string | null
     related_post_id: string | null
   }
 
@@ -43,7 +48,10 @@ export default async function TestPage({ params }: PageProps) {
       const shuffled = [...data].sort(() => Math.random() - 0.5)
       questions = shuffled.slice(0, 20).map(q => ({
         ...q,
-        options: (q.options as string[]) || [],
+        question_type: q.question_type || 'multiple_choice',
+        question_image_url: q.question_image_url || null,
+        options: q.question_type === 'subjective' ? null : ((q.options as string[]) || []),
+        max_score: q.max_score || 10,
       }))
     }
   } else {
@@ -55,7 +63,10 @@ export default async function TestPage({ params }: PageProps) {
 
     questions = (data || []).map(q => ({
       ...q,
-      options: (q.options as string[]) || [],
+      question_type: q.question_type || 'multiple_choice',
+      question_image_url: q.question_image_url || null,
+      options: q.question_type === 'subjective' ? null : ((q.options as string[]) || []),
+      max_score: q.max_score || 10,
     }))
   }
 
