@@ -13,6 +13,25 @@ interface ImageUploadProps {
   className?: string
 }
 
+// 폴더명 안전하게 변환 (한글/특수문자 제거)
+const sanitizeFolderPath = (path: string): string => {
+  // 한글 카테고리를 영문으로 매핑
+  const categoryMap: Record<string, string> = {
+    '남자_매니저_대화': 'male_manager_chat',
+    '여자_매니저_대화': 'female_manager_chat',
+    '여자_매니저_소개': 'female_manager_intro',
+    '추가_서비스_규칙': 'additional_service_rules',
+  }
+
+  let sanitized = path
+  for (const [korean, english] of Object.entries(categoryMap)) {
+    sanitized = sanitized.replace(korean, english)
+  }
+
+  // 나머지 한글/특수문자는 제거하고 영문/숫자/언더스코어/슬래시만 유지
+  return sanitized.replace(/[^a-zA-Z0-9_/\-]/g, '')
+}
+
 // 이미지 압축 함수
 const compressImage = async (file: File, maxWidth = 1200, quality = 0.8): Promise<Blob> => {
   return new Promise((resolve) => {
@@ -87,7 +106,8 @@ function ImageUpload({
 
       const fileExt = 'jpg'
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
-      const filePath = `${folder}/${fileName}`
+      const safeFolder = sanitizeFolderPath(folder)
+      const filePath = `${safeFolder}/${fileName}`
 
       const { error: uploadError } = await supabase.storage
         .from(bucket)
