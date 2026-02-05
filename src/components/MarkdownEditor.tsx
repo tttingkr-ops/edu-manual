@@ -50,7 +50,7 @@ const compressImage = async (file: File, maxWidth = 1200, quality = 0.8): Promis
   })
 }
 
-// 마크다운을 블록으로 파싱 (이미지 전후에 항상 텍스트 블록 보장)
+// 마크다운을 블록으로 파싱 (자유 형식: 텍스트는 내용이 있을 때만, 마지막은 항상 텍스트)
 const parseMarkdownToBlocks = (markdown: string): ContentBlock[] => {
   const blocks: ContentBlock[] = []
   const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g
@@ -60,37 +60,50 @@ const parseMarkdownToBlocks = (markdown: string): ContentBlock[] => {
   let blockId = 0
 
   while ((match = imageRegex.exec(markdown)) !== null) {
-    // 이미지 앞의 텍스트 (비어있어도 항상 추가)
+    // 이미지 앞 텍스트 (내용이 있을 때만 추가)
     const text = markdown.slice(lastIndex, match.index).trim()
-    blocks.push({
-      id: `block-${blockId++}`,
-      type: 'text',
-      content: text,
-    })
+    if (text) {
+      blocks.push({
+        id: `block-${blockId++}`,
+        type: 'text',
+        content: text,
+      })
+    }
 
     // 이미지 블록
     blocks.push({
       id: `block-${blockId++}`,
       type: 'image',
-      content: match[2], // URL
+      content: match[2],
       alt: match[1] || '이미지',
     })
 
     lastIndex = match.index + match[0].length
   }
 
-  // 마지막 텍스트 (비어있어도 항상 추가하여 이미지 뒤에서 타이핑 가능)
-  const remainingText = markdown.slice(lastIndex).trim()
-  blocks.push({
-    id: `block-${blockId++}`,
-    type: 'text',
-    content: remainingText,
-  })
+  // 나머지 텍스트
+  const remaining = markdown.slice(lastIndex).trim()
+  if (remaining) {
+    blocks.push({
+      id: `block-${blockId++}`,
+      type: 'text',
+      content: remaining,
+    })
+  }
+
+  // 마지막 블록이 텍스트가 아니면 빈 텍스트 추가 (항상 타이핑 가능하도록)
+  if (blocks.length === 0 || blocks[blocks.length - 1].type !== 'text') {
+    blocks.push({
+      id: `block-${blockId++}`,
+      type: 'text',
+      content: '',
+    })
+  }
 
   return blocks
 }
 
-// 블록을 마크다운으로 변환
+// 블록을 마크다운으로 변환 (빈 텍스트 블록은 마크다운에서 제외)
 const blocksToMarkdown = (blocks: ContentBlock[]): string => {
   return blocks
     .map(block => {
@@ -99,11 +112,7 @@ const blocksToMarkdown = (blocks: ContentBlock[]): string => {
       }
       return block.content
     })
-    .filter((text, i) => {
-      // 빈 텍스트는 마크다운에서 제거 (시작/끝의 빈 문자열)
-      if (text === '' && (i === 0 || i === blocks.length - 1)) return false
-      return true
-    })
+    .filter(text => text !== '')
     .join('\n\n')
 }
 
@@ -199,44 +208,76 @@ function MarkdownEditor({
     }
   }, [supabase, onImageUpload])
 
-  // 이미지 추가 (특정 블록 뒤에 삽입, 없으면 끝에)
-  const addImageBlock = useCallback(async (file: File, afterBlockId?: string) => {
+  // 이미지 추가 (자유 형식: 빈 텍스트 블록 앞에 삽입하여 연속 이미지 지원)
+  const addImageBlock = useCallback(async (file: File, fromBlockId?: string) => {
     const url = await uploadImage(file)
-    if (url) {
-      const imageBlock = {
-        id: `block-${Date.now()}`,
-        type: 'image' as const,
-        content: url,
-        alt: file.name,
+    if (!url) return
+
+    const imageBlock = {
+      id: `block-${Date.now()}`,
+      type: 'image' as const,
+      content: url,
+      alt: file.name,
+    }
+
+    const newBlocks = [...blocks]
+
+    if (fromBlockId) {
+      const blockIndex = newBlocks.findIndex(b => b.id === fromBlockId)
+      const block = newBlocks[blockIndex]
+
+      if (block && block.type === 'text' && block.content.trim() === '') {
+        // 빈 텍스트 블록: 이미지를 그 앞에 삽입 (텍스트 블록은 아래에 유지)
+        // → 연속 붙여넣기 시 이미지가 순서대로 쌓임
+        newBlocks.splice(blockIndex, 0, imageBlock)
+      } else if (block) {
+        // 내용이 있는 텍스트 블록: 이미지를 그 뒤에 삽입
+        newBlocks.splice(blockIndex + 1, 0, imageBlock)
       }
-      const textBlock = {
+    } else {
+      // 드래그/파일선택: 마지막 텍스트 블록 앞에 삽입
+      const lastBlock = newBlocks[newBlocks.length - 1]
+      if (lastBlock && lastBlock.type === 'text' && lastBlock.content.trim() === '') {
+        newBlocks.splice(newBlocks.length - 1, 0, imageBlock)
+      } else {
+        newBlocks.push(imageBlock)
+      }
+    }
+
+    // 마지막 블록이 텍스트가 아니면 추가
+    if (newBlocks[newBlocks.length - 1].type !== 'text') {
+      newBlocks.push({
         id: `block-${Date.now() + 1}`,
         type: 'text' as const,
         content: '',
-      }
-
-      let newBlocks: ContentBlock[]
-      if (afterBlockId) {
-        const index = blocks.findIndex(b => b.id === afterBlockId)
-        if (index >= 0) {
-          newBlocks = [
-            ...blocks.slice(0, index + 1),
-            imageBlock,
-            textBlock,
-            ...blocks.slice(index + 1),
-          ]
-        } else {
-          newBlocks = [...blocks, imageBlock, textBlock]
-        }
-      } else {
-        newBlocks = [...blocks, imageBlock, textBlock]
-      }
-
-      // 새 텍스트 블록에 자동 포커스
-      focusBlockIdRef.current = textBlock.id
-      updateBlocks(newBlocks)
+      })
     }
+
+    // 이미지 다음 텍스트 블록에 포커스
+    const imgIndex = newBlocks.findIndex(b => b.id === imageBlock.id)
+    const nextText = newBlocks.slice(imgIndex + 1).find(b => b.type === 'text')
+    if (nextText) {
+      focusBlockIdRef.current = nextText.id
+    }
+
+    updateBlocks(newBlocks)
   }, [blocks, uploadImage, updateBlocks])
+
+  // 이미지 사이에 텍스트 블록 삽입
+  const insertTextBlockAt = useCallback((position: number) => {
+    const newBlock = {
+      id: `block-${Date.now()}`,
+      type: 'text' as const,
+      content: '',
+    }
+    const newBlocks = [
+      ...blocks.slice(0, position),
+      newBlock,
+      ...blocks.slice(position),
+    ]
+    focusBlockIdRef.current = newBlock.id
+    updateBlocks(newBlocks)
+  }, [blocks, updateBlocks])
 
   // 텍스트 블록 업데이트
   const updateTextBlock = useCallback((blockId: string, newContent: string) => {
@@ -403,12 +444,26 @@ function MarkdownEditor({
           onDragOver={handleDragOver}
           onDrop={handleDrop}
         >
-          <div className="p-4 space-y-4">
+          <div className="p-4 space-y-2">
             {blocks.map((block, index) => (
               <div key={block.id}>
+                {/* 이미지 사이에 텍스트 삽입 버튼 */}
+                {index > 0 && block.type === 'image' && blocks[index - 1].type === 'image' && (
+                  <div
+                    className="flex items-center gap-2 py-1 cursor-pointer group/insert"
+                    onClick={() => insertTextBlockAt(index)}
+                  >
+                    <div className="flex-1 h-px bg-transparent group-hover/insert:bg-primary-300 transition-colors" />
+                    <span className="text-xs text-gray-300 group-hover/insert:text-primary-500 transition-colors select-none">
+                      + 텍스트 추가
+                    </span>
+                    <div className="flex-1 h-px bg-transparent group-hover/insert:bg-primary-300 transition-colors" />
+                  </div>
+                )}
+
                 {block.type === 'image' ? (
                   // 이미지 블록
-                  <div className="relative group">
+                  <div className="relative group my-2">
                     <img
                       src={block.content}
                       alt={block.alt || '이미지'}
@@ -436,8 +491,8 @@ function MarkdownEditor({
                     onChange={(e) => updateTextBlock(block.id, e.target.value)}
                     onPaste={(e) => handlePaste(e, block.id)}
                     className="w-full px-0 py-2 border-0 focus:ring-0 resize-none text-gray-900 placeholder-gray-400"
-                    rows={Math.max(3, block.content.split('\n').length)}
-                    placeholder={index === 0 ? (placeholder || '내용을 입력하세요...') : '계속 작성하세요...'}
+                    rows={Math.max(2, block.content.split('\n').length)}
+                    placeholder={placeholder || '내용을 입력하세요...'}
                   />
                 )}
               </div>
