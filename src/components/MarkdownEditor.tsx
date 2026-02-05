@@ -133,7 +133,9 @@ function MarkdownEditor({
   const dragCounterRef = useRef(0)
   const isInternalChangeRef = useRef(false)
   const isBlockDragRef = useRef(false)
+  const draggedBlockIdRef = useRef<string | null>(null)
   const dropTargetIndexRef = useRef<number | null>(null)
+  const blocksRef = useRef(blocks)
   const focusBlockIdRef = useRef<string | null>(null)
   const blocksContainerRef = useRef<HTMLDivElement>(null)
   const textareaRefsMap = useRef<Map<string, HTMLTextAreaElement>>(new Map())
@@ -160,6 +162,11 @@ function MarkdownEditor({
         focusBlockIdRef.current = null
       }
     }
+  }, [blocks])
+
+  // blocksRef 동기화 (드래그 핸들러에서 최신 blocks 참조용)
+  useEffect(() => {
+    blocksRef.current = blocks
   }, [blocks])
 
   // 블록 변경 시 마크다운으로 변환하여 부모에 알림
@@ -313,31 +320,47 @@ function MarkdownEditor({
     updateBlocks(newBlocks)
   }, [blocks, updateBlocks])
 
-  // === 블록 순서 변경 (드래그 앤 드롭) ===
+  // === 블록 순서 변경 (드래그 앤 드롭) - ref 기반으로 stale closure 방지 ===
   const handleBlockDragStart = useCallback((e: React.DragEvent, blockId: string) => {
     isBlockDragRef.current = true
+    draggedBlockIdRef.current = blockId
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', blockId)
+    // 드래그 이미지를 블록 전체로 설정
     const blockEl = (e.currentTarget as HTMLElement).closest('[data-block-id]') as HTMLElement
     if (blockEl) {
       e.dataTransfer.setDragImage(blockEl, 20, 20)
     }
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/block-id', blockId)
+    // state는 UI 업데이트용 (opacity 등)
     setDraggedBlockId(blockId)
   }, [])
 
+  // ref 기반으로 최신 blocks와 draggedBlockId 참조
   const handleBlockDrop = useCallback(() => {
     const targetIndex = dropTargetIndexRef.current
-    if (!draggedBlockId || targetIndex === null) return
+    const currentDraggedId = draggedBlockIdRef.current
+    const currentBlocks = blocksRef.current
 
-    const sourceIndex = blocks.findIndex(b => b.id === draggedBlockId)
-    if (sourceIndex < 0 || sourceIndex === targetIndex || sourceIndex + 1 === targetIndex) {
+    if (!currentDraggedId || targetIndex === null) {
+      draggedBlockIdRef.current = null
+      dropTargetIndexRef.current = null
+      isBlockDragRef.current = false
       setDraggedBlockId(null)
       setDropTargetIndex(null)
-      isBlockDragRef.current = false
       return
     }
 
-    const newBlocks = [...blocks]
+    const sourceIndex = currentBlocks.findIndex(b => b.id === currentDraggedId)
+    if (sourceIndex < 0 || sourceIndex === targetIndex || sourceIndex + 1 === targetIndex) {
+      draggedBlockIdRef.current = null
+      dropTargetIndexRef.current = null
+      isBlockDragRef.current = false
+      setDraggedBlockId(null)
+      setDropTargetIndex(null)
+      return
+    }
+
+    const newBlocks = [...currentBlocks]
     const [moved] = newBlocks.splice(sourceIndex, 1)
     const adjusted = targetIndex > sourceIndex ? targetIndex - 1 : targetIndex
     newBlocks.splice(adjusted, 0, moved)
@@ -351,18 +374,20 @@ function MarkdownEditor({
       })
     }
 
-    setDraggedBlockId(null)
-    setDropTargetIndex(null)
+    draggedBlockIdRef.current = null
     dropTargetIndexRef.current = null
     isBlockDragRef.current = false
+    setDraggedBlockId(null)
+    setDropTargetIndex(null)
     updateBlocks(newBlocks)
-  }, [draggedBlockId, blocks, updateBlocks])
+  }, [updateBlocks])
 
   const handleBlockDragEnd = useCallback(() => {
-    setDraggedBlockId(null)
-    setDropTargetIndex(null)
+    draggedBlockIdRef.current = null
     dropTargetIndexRef.current = null
     isBlockDragRef.current = false
+    setDraggedBlockId(null)
+    setDropTargetIndex(null)
   }, [])
 
   // === 컨테이너 드래그 핸들러 (파일 업로드 + 블록 리오더링 통합) ===
@@ -389,24 +414,26 @@ function MarkdownEditor({
   // 컨테이너 dragOver: 블록 리오더링 시 "가장 가까운 블록 경계" 계산
   const handleContainerDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
-    e.stopPropagation()
 
     if (!isBlockDragRef.current || !blocksContainerRef.current) return
     e.dataTransfer.dropEffect = 'move'
 
     const blockEls = blocksContainerRef.current.querySelectorAll('[data-block-id]')
+    if (blockEls.length === 0) return
+
     let nearestIndex = 0
     let minDistance = Infinity
 
     blockEls.forEach((el, i) => {
       const rect = el.getBoundingClientRect()
+      // 블록 상단 경계까지의 거리
       const topDist = Math.abs(e.clientY - rect.top)
-      const bottomDist = Math.abs(e.clientY - rect.bottom)
-
       if (topDist < minDistance) {
         minDistance = topDist
         nearestIndex = i
       }
+      // 블록 하단 경계까지의 거리
+      const bottomDist = Math.abs(e.clientY - rect.bottom)
       if (bottomDist < minDistance) {
         minDistance = bottomDist
         nearestIndex = i + 1
@@ -419,7 +446,6 @@ function MarkdownEditor({
 
   const handleContainerDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault()
-    e.stopPropagation()
 
     // 블록 리오더링
     if (isBlockDragRef.current) {
@@ -580,7 +606,9 @@ function MarkdownEditor({
                     draggable
                     onDragStart={(e) => handleBlockDragStart(e, block.id)}
                     onDragEnd={handleBlockDragEnd}
-                    className="flex-shrink-0 mt-2 px-0.5 cursor-grab active:cursor-grabbing opacity-0 group-hover/block:opacity-100 transition-opacity select-none"
+                    className={`flex-shrink-0 mt-2 px-0.5 cursor-grab active:cursor-grabbing transition-opacity select-none ${
+                      draggedBlockId ? 'opacity-100' : 'opacity-0 group-hover/block:opacity-100'
+                    }`}
                     title="드래그하여 순서 변경"
                   >
                     <svg className="w-4 h-5 text-gray-300 hover:text-gray-500" viewBox="0 0 16 20" fill="currentColor">
@@ -593,14 +621,15 @@ function MarkdownEditor({
                     </svg>
                   </div>
 
-                  {/* 블록 콘텐츠 */}
-                  <div className="flex-1 min-w-0">
+                  {/* 블록 콘텐츠 (드래그 중 pointer-events 비활성화) */}
+                  <div className={`flex-1 min-w-0 ${draggedBlockId ? 'pointer-events-none' : ''}`}>
                     {block.type === 'image' ? (
                       // 이미지 블록
                       <div className="relative group my-1">
                         <img
                           src={block.content}
                           alt={block.alt || '이미지'}
+                          draggable={false}
                           className="max-w-full h-auto rounded-lg border border-gray-200 shadow-sm"
                         />
                         <button
