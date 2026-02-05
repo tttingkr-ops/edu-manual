@@ -50,7 +50,7 @@ const compressImage = async (file: File, maxWidth = 1200, quality = 0.8): Promis
   })
 }
 
-// 마크다운을 블록으로 파싱
+// 마크다운을 블록으로 파싱 (이미지 전후에 항상 텍스트 블록 보장)
 const parseMarkdownToBlocks = (markdown: string): ContentBlock[] => {
   const blocks: ContentBlock[] = []
   const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g
@@ -60,17 +60,13 @@ const parseMarkdownToBlocks = (markdown: string): ContentBlock[] => {
   let blockId = 0
 
   while ((match = imageRegex.exec(markdown)) !== null) {
-    // 이미지 앞의 텍스트
-    if (match.index > lastIndex) {
-      const text = markdown.slice(lastIndex, match.index).trim()
-      if (text) {
-        blocks.push({
-          id: `block-${blockId++}`,
-          type: 'text',
-          content: text,
-        })
-      }
-    }
+    // 이미지 앞의 텍스트 (비어있어도 항상 추가)
+    const text = markdown.slice(lastIndex, match.index).trim()
+    blocks.push({
+      id: `block-${blockId++}`,
+      type: 'text',
+      content: text,
+    })
 
     // 이미지 블록
     blocks.push({
@@ -83,38 +79,32 @@ const parseMarkdownToBlocks = (markdown: string): ContentBlock[] => {
     lastIndex = match.index + match[0].length
   }
 
-  // 마지막 텍스트
-  if (lastIndex < markdown.length) {
-    const text = markdown.slice(lastIndex).trim()
-    if (text) {
-      blocks.push({
-        id: `block-${blockId++}`,
-        type: 'text',
-        content: text,
-      })
-    }
-  }
-
-  // 블록이 없으면 빈 텍스트 블록 추가
-  if (blocks.length === 0) {
-    blocks.push({
-      id: 'block-0',
-      type: 'text',
-      content: '',
-    })
-  }
+  // 마지막 텍스트 (비어있어도 항상 추가하여 이미지 뒤에서 타이핑 가능)
+  const remainingText = markdown.slice(lastIndex).trim()
+  blocks.push({
+    id: `block-${blockId++}`,
+    type: 'text',
+    content: remainingText,
+  })
 
   return blocks
 }
 
 // 블록을 마크다운으로 변환
 const blocksToMarkdown = (blocks: ContentBlock[]): string => {
-  return blocks.map(block => {
-    if (block.type === 'image') {
-      return `![${block.alt || '이미지'}](${block.content})`
-    }
-    return block.content
-  }).join('\n\n')
+  return blocks
+    .map(block => {
+      if (block.type === 'image') {
+        return `![${block.alt || '이미지'}](${block.content})`
+      }
+      return block.content
+    })
+    .filter((text, i) => {
+      // 빈 텍스트는 마크다운에서 제거 (시작/끝의 빈 문자열)
+      if (text === '' && (i === 0 || i === blocks.length - 1)) return false
+      return true
+    })
+    .join('\n\n')
 }
 
 function MarkdownEditor({
@@ -130,20 +120,39 @@ function MarkdownEditor({
   const [showCodeMode, setShowCodeMode] = useState(false)
   const [codeValue, setCodeValue] = useState(value)
   const dragCounterRef = useRef(0)
+  const isInternalChangeRef = useRef(false)
+  const focusBlockIdRef = useRef<string | null>(null)
+  const textareaRefsMap = useRef<Map<string, HTMLTextAreaElement>>(new Map())
   const supabase = useMemo(() => createClient(), [])
 
-  // 외부 value 변경 시 동기화
+  // 외부 value 변경 시 동기화 (내부 변경은 무시)
   useEffect(() => {
+    if (isInternalChangeRef.current) {
+      isInternalChangeRef.current = false
+      return
+    }
     if (!showCodeMode) {
       setBlocks(parseMarkdownToBlocks(value))
     }
     setCodeValue(value)
   }, [value, showCodeMode])
 
+  // 새 텍스트 블록에 자동 포커스
+  useEffect(() => {
+    if (focusBlockIdRef.current) {
+      const el = textareaRefsMap.current.get(focusBlockIdRef.current)
+      if (el) {
+        el.focus()
+        focusBlockIdRef.current = null
+      }
+    }
+  }, [blocks])
+
   // 블록 변경 시 마크다운으로 변환하여 부모에 알림
   const updateBlocks = useCallback((newBlocks: ContentBlock[]) => {
     setBlocks(newBlocks)
     const markdown = blocksToMarkdown(newBlocks)
+    isInternalChangeRef.current = true
     onChange(markdown)
     setCodeValue(markdown)
   }, [onChange])
@@ -190,24 +199,41 @@ function MarkdownEditor({
     }
   }, [supabase, onImageUpload])
 
-  // 이미지 추가 (블록 끝에)
-  const addImageBlock = useCallback(async (file: File) => {
+  // 이미지 추가 (특정 블록 뒤에 삽입, 없으면 끝에)
+  const addImageBlock = useCallback(async (file: File, afterBlockId?: string) => {
     const url = await uploadImage(file)
     if (url) {
-      const newBlocks = [
-        ...blocks,
-        {
-          id: `block-${Date.now()}`,
-          type: 'image' as const,
-          content: url,
-          alt: file.name,
-        },
-        {
-          id: `block-${Date.now() + 1}`,
-          type: 'text' as const,
-          content: '',
-        },
-      ]
+      const imageBlock = {
+        id: `block-${Date.now()}`,
+        type: 'image' as const,
+        content: url,
+        alt: file.name,
+      }
+      const textBlock = {
+        id: `block-${Date.now() + 1}`,
+        type: 'text' as const,
+        content: '',
+      }
+
+      let newBlocks: ContentBlock[]
+      if (afterBlockId) {
+        const index = blocks.findIndex(b => b.id === afterBlockId)
+        if (index >= 0) {
+          newBlocks = [
+            ...blocks.slice(0, index + 1),
+            imageBlock,
+            textBlock,
+            ...blocks.slice(index + 1),
+          ]
+        } else {
+          newBlocks = [...blocks, imageBlock, textBlock]
+        }
+      } else {
+        newBlocks = [...blocks, imageBlock, textBlock]
+      }
+
+      // 새 텍스트 블록에 자동 포커스
+      focusBlockIdRef.current = textBlock.id
       updateBlocks(newBlocks)
     }
   }, [blocks, uploadImage, updateBlocks])
@@ -271,8 +297,8 @@ function MarkdownEditor({
     }
   }, [addImageBlock])
 
-  // 붙여넣기 핸들러
-  const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
+  // 붙여넣기 핸들러 (현재 블록 뒤에 이미지 삽입)
+  const handlePaste = useCallback(async (e: React.ClipboardEvent, blockId: string) => {
     const items = Array.from(e.clipboardData.items)
     const imageItems = items.filter(item => item.type.startsWith('image/'))
 
@@ -283,7 +309,7 @@ function MarkdownEditor({
     for (const item of imageItems) {
       const file = item.getAsFile()
       if (file) {
-        await addImageBlock(file)
+        await addImageBlock(file, blockId)
       }
     }
   }, [addImageBlock])
@@ -402,9 +428,13 @@ function MarkdownEditor({
                 ) : (
                   // 텍스트 블록
                   <textarea
+                    ref={(el) => {
+                      if (el) textareaRefsMap.current.set(block.id, el)
+                      else textareaRefsMap.current.delete(block.id)
+                    }}
                     value={block.content}
                     onChange={(e) => updateTextBlock(block.id, e.target.value)}
-                    onPaste={handlePaste}
+                    onPaste={(e) => handlePaste(e, block.id)}
                     className="w-full px-0 py-2 border-0 focus:ring-0 resize-none text-gray-900 placeholder-gray-400"
                     rows={Math.max(3, block.content.split('\n').length)}
                     placeholder={index === 0 ? (placeholder || '내용을 입력하세요...') : '계속 작성하세요...'}
