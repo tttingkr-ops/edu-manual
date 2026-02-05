@@ -1,6 +1,6 @@
 // Created: 2026-02-03 10:30:00
-// 마크다운 에디터 - 드래그 앤 드랍 이미지 업로드 지원
-// Updated: 2026-02-03 - 이미지 미리보기 개선, 드래그앤드랍 버그 수정
+// 마크다운 에디터 - WYSIWYG 스타일 이미지 편집
+// Updated: 2026-02-03 - 비주얼 모드 기본, 이미지 인라인 표시
 'use client'
 
 import { useState, useRef, useCallback, useMemo, memo, useEffect } from 'react'
@@ -14,9 +14,11 @@ interface MarkdownEditorProps {
   onImageUpload?: (url: string) => void
 }
 
-interface UploadedImage {
-  url: string
-  name: string
+interface ContentBlock {
+  id: string
+  type: 'text' | 'image'
+  content: string // text일 경우 텍스트, image일 경우 URL
+  alt?: string // image일 경우 alt 텍스트
 }
 
 // 이미지 압축 함수
@@ -48,15 +50,71 @@ const compressImage = async (file: File, maxWidth = 1200, quality = 0.8): Promis
   })
 }
 
-// 마크다운에서 이미지 URL 추출
-const extractImagesFromMarkdown = (markdown: string): UploadedImage[] => {
-  const regex = /!\[([^\]]*)\]\(([^)]+)\)/g
-  const images: UploadedImage[] = []
+// 마크다운을 블록으로 파싱
+const parseMarkdownToBlocks = (markdown: string): ContentBlock[] => {
+  const blocks: ContentBlock[] = []
+  const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g
+
+  let lastIndex = 0
   let match
-  while ((match = regex.exec(markdown)) !== null) {
-    images.push({ name: match[1] || '이미지', url: match[2] })
+  let blockId = 0
+
+  while ((match = imageRegex.exec(markdown)) !== null) {
+    // 이미지 앞의 텍스트
+    if (match.index > lastIndex) {
+      const text = markdown.slice(lastIndex, match.index).trim()
+      if (text) {
+        blocks.push({
+          id: `block-${blockId++}`,
+          type: 'text',
+          content: text,
+        })
+      }
+    }
+
+    // 이미지 블록
+    blocks.push({
+      id: `block-${blockId++}`,
+      type: 'image',
+      content: match[2], // URL
+      alt: match[1] || '이미지',
+    })
+
+    lastIndex = match.index + match[0].length
   }
-  return images
+
+  // 마지막 텍스트
+  if (lastIndex < markdown.length) {
+    const text = markdown.slice(lastIndex).trim()
+    if (text) {
+      blocks.push({
+        id: `block-${blockId++}`,
+        type: 'text',
+        content: text,
+      })
+    }
+  }
+
+  // 블록이 없으면 빈 텍스트 블록 추가
+  if (blocks.length === 0) {
+    blocks.push({
+      id: 'block-0',
+      type: 'text',
+      content: '',
+    })
+  }
+
+  return blocks
+}
+
+// 블록을 마크다운으로 변환
+const blocksToMarkdown = (blocks: ContentBlock[]): string => {
+  return blocks.map(block => {
+    if (block.type === 'image') {
+      return `![${block.alt || '이미지'}](${block.content})`
+    }
+    return block.content
+  }).join('\n\n')
 }
 
 function MarkdownEditor({
@@ -66,26 +124,28 @@ function MarkdownEditor({
   rows = 15,
   onImageUpload,
 }: MarkdownEditorProps) {
-  const [isDragging, setIsDragging] = useState(false)
+  const [blocks, setBlocks] = useState<ContentBlock[]>(() => parseMarkdownToBlocks(value))
   const [isUploading, setIsUploading] = useState(false)
-  const [showPreview, setShowPreview] = useState(false)
-  const [localValue, setLocalValue] = useState(value)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [showCodeMode, setShowCodeMode] = useState(false)
+  const [codeValue, setCodeValue] = useState(value)
   const dragCounterRef = useRef(0)
   const supabase = useMemo(() => createClient(), [])
 
   // 외부 value 변경 시 동기화
   useEffect(() => {
-    setLocalValue(value)
-  }, [value])
+    if (!showCodeMode) {
+      setBlocks(parseMarkdownToBlocks(value))
+    }
+    setCodeValue(value)
+  }, [value, showCodeMode])
 
-  // 마크다운에서 추출한 이미지 목록
-  const embeddedImages = useMemo(() => extractImagesFromMarkdown(localValue), [localValue])
-
-  // 로컬 값 변경 핸들러
-  const handleLocalChange = useCallback((newValue: string) => {
-    setLocalValue(newValue)
-    onChange(newValue)
+  // 블록 변경 시 마크다운으로 변환하여 부모에 알림
+  const updateBlocks = useCallback((newBlocks: ContentBlock[]) => {
+    setBlocks(newBlocks)
+    const markdown = blocksToMarkdown(newBlocks)
+    onChange(markdown)
+    setCodeValue(markdown)
   }, [onChange])
 
   // 이미지 업로드 처리
@@ -130,25 +190,50 @@ function MarkdownEditor({
     }
   }, [supabase, onImageUpload])
 
-  // 커서 위치에 텍스트 삽입
-  const insertAtCursor = useCallback((text: string) => {
-    const textarea = textareaRef.current
-    if (!textarea) return
+  // 이미지 추가 (블록 끝에)
+  const addImageBlock = useCallback(async (file: File) => {
+    const url = await uploadImage(file)
+    if (url) {
+      const newBlocks = [
+        ...blocks,
+        {
+          id: `block-${Date.now()}`,
+          type: 'image' as const,
+          content: url,
+          alt: file.name,
+        },
+        {
+          id: `block-${Date.now() + 1}`,
+          type: 'text' as const,
+          content: '',
+        },
+      ]
+      updateBlocks(newBlocks)
+    }
+  }, [blocks, uploadImage, updateBlocks])
 
-    const start = textarea.selectionStart
-    const end = textarea.selectionEnd
-    const newValue = localValue.substring(0, start) + text + localValue.substring(end)
+  // 텍스트 블록 업데이트
+  const updateTextBlock = useCallback((blockId: string, newContent: string) => {
+    const newBlocks = blocks.map(block =>
+      block.id === blockId ? { ...block, content: newContent } : block
+    )
+    updateBlocks(newBlocks)
+  }, [blocks, updateBlocks])
 
-    setLocalValue(newValue)
-    onChange(newValue)
+  // 이미지 블록 삭제
+  const removeImageBlock = useCallback((blockId: string) => {
+    const newBlocks = blocks.filter(block => block.id !== blockId)
+    if (newBlocks.length === 0) {
+      newBlocks.push({
+        id: `block-${Date.now()}`,
+        type: 'text',
+        content: '',
+      })
+    }
+    updateBlocks(newBlocks)
+  }, [blocks, updateBlocks])
 
-    setTimeout(() => {
-      textarea.focus()
-      textarea.setSelectionRange(start + text.length, start + text.length)
-    }, 0)
-  }, [localValue, onChange])
-
-  // 드래그 앤 드랍 핸들러 (카운터로 정확한 감지)
+  // 드래그 앤 드랍 핸들러
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
@@ -182,12 +267,9 @@ function MarkdownEditor({
     const imageFiles = files.filter(file => file.type.startsWith('image/'))
 
     for (const file of imageFiles) {
-      const url = await uploadImage(file)
-      if (url) {
-        insertAtCursor(`\n![${file.name}](${url})\n`)
-      }
+      await addImageBlock(file)
     }
-  }, [uploadImage, insertAtCursor])
+  }, [addImageBlock])
 
   // 붙여넣기 핸들러
   const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
@@ -201,50 +283,37 @@ function MarkdownEditor({
     for (const item of imageItems) {
       const file = item.getAsFile()
       if (file) {
-        const url = await uploadImage(file)
-        if (url) {
-          insertAtCursor(`\n![붙여넣은 이미지](${url})\n`)
-        }
+        await addImageBlock(file)
       }
     }
-  }, [uploadImage, insertAtCursor])
+  }, [addImageBlock])
 
   // 파일 선택 핸들러
   const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
 
     for (const file of files) {
-      const url = await uploadImage(file)
-      if (url) {
-        insertAtCursor(`\n![${file.name}](${url})\n`)
-      }
+      await addImageBlock(file)
     }
 
     e.target.value = ''
-  }, [uploadImage, insertAtCursor])
+  }, [addImageBlock])
 
-  // 이미지 삭제 (마크다운에서 제거)
-  const removeImage = useCallback((imageUrl: string) => {
-    const regex = new RegExp(`\\n?!\\[[^\\]]*\\]\\(${imageUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)\\n?`, 'g')
-    const newValue = localValue.replace(regex, '\n')
-    setLocalValue(newValue)
+  // 코드 모드 전환
+  const toggleCodeMode = useCallback(() => {
+    if (showCodeMode) {
+      // 코드 모드 -> 비주얼 모드
+      setBlocks(parseMarkdownToBlocks(codeValue))
+      onChange(codeValue)
+    }
+    setShowCodeMode(!showCodeMode)
+  }, [showCodeMode, codeValue, onChange])
+
+  // 코드 모드에서 변경
+  const handleCodeChange = useCallback((newValue: string) => {
+    setCodeValue(newValue)
     onChange(newValue)
-  }, [localValue, onChange])
-
-  // 마크다운을 HTML로 변환 (간단한 버전)
-  const renderMarkdown = useCallback((md: string) => {
-    let html = md
-      .replace(/^### (.*$)/gim, '<h3 class="text-lg font-semibold mt-4 mb-2">$1</h3>')
-      .replace(/^## (.*$)/gim, '<h2 class="text-xl font-semibold mt-4 mb-2">$1</h2>')
-      .replace(/^# (.*$)/gim, '<h1 class="text-2xl font-bold mt-4 mb-2">$1</h1>')
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em>$1</em>')
-      .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="max-w-full h-auto rounded-lg my-4 border" />')
-      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="text-primary-600 hover:underline">$1</a>')
-      .replace(/^- (.*$)/gim, '<li class="ml-4">$1</li>')
-      .replace(/\n/g, '<br />')
-    return html
-  }, [])
+  }, [onChange])
 
   return (
     <div className="space-y-3">
@@ -276,26 +345,31 @@ function MarkdownEditor({
         </div>
         <button
           type="button"
-          onClick={() => setShowPreview(!showPreview)}
+          onClick={toggleCodeMode}
           className={`px-3 py-1.5 text-sm rounded transition-colors ${
-            showPreview
-              ? 'bg-primary-600 text-white'
+            showCodeMode
+              ? 'bg-gray-600 text-white'
               : 'text-gray-700 hover:bg-gray-200'
           }`}
         >
-          {showPreview ? '편집' : '미리보기'}
+          {showCodeMode ? '비주얼 모드' : '코드 모드'}
         </button>
       </div>
 
-      {/* 에디터/미리보기 영역 */}
-      {showPreview ? (
-        <div
-          className="w-full px-4 py-3 border border-gray-300 rounded-b-lg bg-white min-h-[300px] prose prose-sm max-w-none"
-          dangerouslySetInnerHTML={{ __html: renderMarkdown(localValue) || '<p class="text-gray-400">내용이 없습니다.</p>' }}
+      {/* 에디터 영역 */}
+      {showCodeMode ? (
+        // 코드 모드 (마크다운 직접 편집)
+        <textarea
+          value={codeValue}
+          onChange={(e) => handleCodeChange(e.target.value)}
+          className="w-full px-4 py-3 border border-gray-300 rounded-b-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 font-mono text-sm resize-none"
+          rows={rows}
+          placeholder={placeholder || '마크다운 형식으로 입력하세요...'}
         />
       ) : (
+        // 비주얼 모드
         <div
-          className={`relative transition-all ${
+          className={`relative border border-gray-300 rounded-b-lg bg-white min-h-[300px] transition-all ${
             isDragging ? 'ring-2 ring-primary-500 ring-offset-2' : ''
           }`}
           onDragEnter={handleDragEnter}
@@ -303,15 +377,42 @@ function MarkdownEditor({
           onDragOver={handleDragOver}
           onDrop={handleDrop}
         >
-          <textarea
-            ref={textareaRef}
-            value={localValue}
-            onChange={(e) => handleLocalChange(e.target.value)}
-            onPaste={handlePaste}
-            className="w-full px-4 py-3 border border-gray-300 rounded-b-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 font-mono text-sm resize-none"
-            rows={rows}
-            placeholder={placeholder || '내용을 입력하세요. 이미지를 드래그하거나 붙여넣기(Ctrl+V) 할 수 있습니다.'}
-          />
+          <div className="p-4 space-y-4">
+            {blocks.map((block, index) => (
+              <div key={block.id}>
+                {block.type === 'image' ? (
+                  // 이미지 블록
+                  <div className="relative group">
+                    <img
+                      src={block.content}
+                      alt={block.alt || '이미지'}
+                      className="max-w-full h-auto rounded-lg border border-gray-200 shadow-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeImageBlock(block.id)}
+                      className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                      title="이미지 삭제"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ) : (
+                  // 텍스트 블록
+                  <textarea
+                    value={block.content}
+                    onChange={(e) => updateTextBlock(block.id, e.target.value)}
+                    onPaste={handlePaste}
+                    className="w-full px-0 py-2 border-0 focus:ring-0 resize-none text-gray-900 placeholder-gray-400"
+                    rows={Math.max(3, block.content.split('\n').length)}
+                    placeholder={index === 0 ? (placeholder || '내용을 입력하세요...') : '계속 작성하세요...'}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
 
           {/* 드래그 오버레이 */}
           {isDragging && (
@@ -327,45 +428,12 @@ function MarkdownEditor({
         </div>
       )}
 
-      {/* 첨부된 이미지 갤러리 */}
-      {embeddedImages.length > 0 && (
-        <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-          <p className="text-sm font-medium text-blue-800 mb-2">
-            첨부된 이미지 ({embeddedImages.length}개)
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-            {embeddedImages.map((img, index) => (
-              <div key={index} className="relative group">
-                <img
-                  src={img.url}
-                  alt={img.name}
-                  loading="lazy"
-                  className="w-full h-24 object-cover rounded-lg border border-blue-200"
-                />
-                <button
-                  type="button"
-                  onClick={() => removeImage(img.url)}
-                  className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
-                  title="이미지 삭제"
-                >
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* 도움말 */}
       <p className="text-xs text-gray-500">
-        이미지를 드래그하거나 Ctrl+V로 붙여넣을 수 있습니다. 미리보기 버튼으로 결과를 확인하세요.
+        이미지를 드래그하거나 Ctrl+V로 붙여넣을 수 있습니다. 코드 모드에서 마크다운을 직접 편집할 수 있습니다.
       </p>
     </div>
   )
 }
 
 export default memo(MarkdownEditor)
-
-export type { UploadedImage }
