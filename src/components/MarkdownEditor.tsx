@@ -326,12 +326,14 @@ function MarkdownEditor({
     draggedBlockIdRef.current = blockId
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('text/plain', blockId)
-    // 드래그 이미지를 블록 전체로 설정
-    const blockEl = (e.currentTarget as HTMLElement).closest('[data-block-id]') as HTMLElement
-    if (blockEl) {
-      e.dataTransfer.setDragImage(blockEl, 20, 20)
-    }
-    // state는 UI 업데이트용 (opacity 등)
+    // 드래그 이미지: 간단한 placeholder 생성 (큰 이미지가 ghost로 잡히는 것 방지)
+    const dragGhost = document.createElement('div')
+    dragGhost.style.cssText = 'width:200px;height:36px;background:#e0e7ff;border:2px dashed #6366f1;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#4338ca;position:absolute;top:-9999px;'
+    dragGhost.textContent = '블록 이동 중...'
+    document.body.appendChild(dragGhost)
+    e.dataTransfer.setDragImage(dragGhost, 100, 18)
+    requestAnimationFrame(() => document.body.removeChild(dragGhost))
+    // state는 UI 업데이트용 (collapse 등)
     setDraggedBlockId(blockId)
   }, [])
 
@@ -351,7 +353,7 @@ function MarkdownEditor({
     }
 
     const sourceIndex = currentBlocks.findIndex(b => b.id === currentDraggedId)
-    if (sourceIndex < 0 || sourceIndex === targetIndex || sourceIndex + 1 === targetIndex) {
+    if (sourceIndex < 0) {
       draggedBlockIdRef.current = null
       dropTargetIndexRef.current = null
       isBlockDragRef.current = false
@@ -360,18 +362,25 @@ function MarkdownEditor({
       return
     }
 
+    // remove-then-insert 방식: 원본 제거 후 새 위치에 삽입
     const newBlocks = [...currentBlocks]
     const [moved] = newBlocks.splice(sourceIndex, 1)
-    const adjusted = targetIndex > sourceIndex ? targetIndex - 1 : targetIndex
-    newBlocks.splice(adjusted, 0, moved)
+    const insertAt = targetIndex > sourceIndex ? targetIndex - 1 : targetIndex
 
-    // 마지막 블록이 텍스트가 아니면 추가
-    if (newBlocks[newBlocks.length - 1].type !== 'text') {
-      newBlocks.push({
-        id: `block-${Date.now()}`,
-        type: 'text' as const,
-        content: '',
-      })
+    // 실제 위치가 변경될 때만 업데이트
+    if (insertAt !== sourceIndex) {
+      newBlocks.splice(insertAt, 0, moved)
+
+      // 마지막 블록이 텍스트가 아니면 추가
+      if (newBlocks[newBlocks.length - 1].type !== 'text') {
+        newBlocks.push({
+          id: `block-${Date.now()}`,
+          type: 'text' as const,
+          content: '',
+        })
+      }
+
+      updateBlocks(newBlocks)
     }
 
     draggedBlockIdRef.current = null
@@ -379,7 +388,6 @@ function MarkdownEditor({
     isBlockDragRef.current = false
     setDraggedBlockId(null)
     setDropTargetIndex(null)
-    updateBlocks(newBlocks)
   }, [updateBlocks])
 
   const handleBlockDragEnd = useCallback(() => {
@@ -411,37 +419,41 @@ function MarkdownEditor({
     }
   }, [])
 
-  // 컨테이너 dragOver: 블록 리오더링 시 "가장 가까운 블록 경계" 계산
+  // 컨테이너 dragOver: 블록 리오더링 시 드롭 위치 계산
+  // 드래그 중인 블록은 collapsed 상태이므로 해당 블록 스킵 + 큰 블록에서도 작동하도록 capped threshold 사용
   const handleContainerDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
 
     if (!isBlockDragRef.current || !blocksContainerRef.current) return
     e.dataTransfer.dropEffect = 'move'
 
-    const blockEls = blocksContainerRef.current.querySelectorAll('[data-block-id]')
-    if (blockEls.length === 0) return
+    const currentDraggedId = draggedBlockIdRef.current
+    const allBlockEls = Array.from(
+      blocksContainerRef.current.querySelectorAll('[data-block-id]')
+    )
+    if (allBlockEls.length === 0) return
 
-    let nearestIndex = 0
-    let minDistance = Infinity
+    // 드래그 중인 블록을 제외한 블록들만 대상으로 계산
+    // capped threshold: 큰 블록이어도 최대 60px까지만 "insert before" 영역
+    let targetIndex = 0
 
-    blockEls.forEach((el, i) => {
+    for (let i = 0; i < allBlockEls.length; i++) {
+      const el = allBlockEls[i]
+      if (el.getAttribute('data-block-id') === currentDraggedId) continue
+
       const rect = el.getBoundingClientRect()
-      // 블록 상단 경계까지의 거리
-      const topDist = Math.abs(e.clientY - rect.top)
-      if (topDist < minDistance) {
-        minDistance = topDist
-        nearestIndex = i
-      }
-      // 블록 하단 경계까지의 거리
-      const bottomDist = Math.abs(e.clientY - rect.bottom)
-      if (bottomDist < minDistance) {
-        minDistance = bottomDist
-        nearestIndex = i + 1
-      }
-    })
+      const height = rect.bottom - rect.top
+      // 블록 높이의 절반 또는 60px 중 작은 값을 threshold로 사용
+      const threshold = Math.min(height * 0.5, 60)
 
-    dropTargetIndexRef.current = nearestIndex
-    setDropTargetIndex(nearestIndex)
+      if (e.clientY > rect.top + threshold) {
+        // 커서가 이 블록의 threshold를 넘었으면 → 이 블록 다음에 삽입
+        targetIndex = i + 1
+      }
+    }
+
+    dropTargetIndexRef.current = targetIndex
+    setDropTargetIndex(targetIndex)
   }, [])
 
   const handleContainerDrop = useCallback(async (e: React.DragEvent) => {
@@ -573,11 +585,15 @@ function MarkdownEditor({
           onDrop={handleContainerDrop}
         >
           <div className="p-4 space-y-1">
-            {blocks.map((block, index) => (
+            {blocks.map((block, index) => {
+              // 드롭 인디케이터: no-op 위치(원래 자리)에는 표시하지 않음
+              const dragSourceIndex = draggedBlockId ? blocks.findIndex(b => b.id === draggedBlockId) : -1
+              const isNoOp = dragSourceIndex >= 0 && (index === dragSourceIndex || index === dragSourceIndex + 1)
+              return (
               <div key={block.id}>
                 {/* 드롭 위치 표시선 */}
-                {dropTargetIndex === index && draggedBlockId && draggedBlockId !== block.id && (
-                  <div className="h-0.5 bg-primary-500 rounded my-1" />
+                {dropTargetIndex === index && draggedBlockId && !isNoOp && (
+                  <div className="h-1 bg-primary-500 rounded my-1 shadow-sm" />
                 )}
 
                 {/* 이미지 사이 텍스트 삽입 버튼 (드래그 중 숨김) */}
@@ -594,11 +610,13 @@ function MarkdownEditor({
                   </div>
                 )}
 
-                {/* 블록 (드래그 핸들 + 콘텐츠) */}
+                {/* 블록 (드래그 핸들 + 콘텐츠) - 드래그 중 collapse로 다른 블록 접근 용이하게 */}
                 <div
                   data-block-id={block.id}
-                  className={`flex items-start gap-1 group/block rounded transition-opacity ${
-                    draggedBlockId === block.id ? 'opacity-30' : ''
+                  className={`flex items-start gap-1 group/block rounded ${
+                    draggedBlockId === block.id
+                      ? 'max-h-10 overflow-hidden opacity-50 border-2 border-dashed border-primary-400 bg-primary-50 rounded-md my-0.5'
+                      : ''
                   }`}
                 >
                   {/* 드래그 핸들 */}
@@ -630,6 +648,7 @@ function MarkdownEditor({
                           src={block.content}
                           alt={block.alt || '이미지'}
                           draggable={false}
+                          onDragStart={(e) => e.preventDefault()}
                           className="max-w-full h-auto rounded-lg border border-gray-200 shadow-sm"
                         />
                         <button
@@ -676,11 +695,14 @@ function MarkdownEditor({
                   </div>
                 </div>
               </div>
-            ))}
+            )})}
 
             {/* 맨 아래 드롭 표시선 */}
-            {dropTargetIndex === blocks.length && draggedBlockId && (
-              <div className="h-0.5 bg-primary-500 rounded my-1" />
+            {dropTargetIndex === blocks.length && draggedBlockId && (() => {
+              const dragSourceIndex = blocks.findIndex(b => b.id === draggedBlockId)
+              return dragSourceIndex < blocks.length - 1
+            })() && (
+              <div className="h-1 bg-primary-500 rounded my-1 shadow-sm" />
             )}
           </div>
 
