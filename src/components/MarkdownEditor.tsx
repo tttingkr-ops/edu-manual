@@ -135,6 +135,7 @@ function MarkdownEditor({
   const isBlockDragRef = useRef(false)
   const dropTargetIndexRef = useRef<number | null>(null)
   const focusBlockIdRef = useRef<string | null>(null)
+  const blocksContainerRef = useRef<HTMLDivElement>(null)
   const textareaRefsMap = useRef<Map<string, HTMLTextAreaElement>>(new Map())
   const supabase = useMemo(() => createClient(), [])
 
@@ -324,18 +325,6 @@ function MarkdownEditor({
     setDraggedBlockId(blockId)
   }, [])
 
-  const handleBlockDragOver = useCallback((e: React.DragEvent, index: number) => {
-    if (!draggedBlockId) return
-    e.preventDefault()
-    e.stopPropagation()
-    e.dataTransfer.dropEffect = 'move'
-    const rect = e.currentTarget.getBoundingClientRect()
-    const midY = rect.top + rect.height / 2
-    const insertIndex = e.clientY < midY ? index : index + 1
-    dropTargetIndexRef.current = insertIndex
-    setDropTargetIndex(insertIndex)
-  }, [draggedBlockId])
-
   const handleBlockDrop = useCallback(() => {
     const targetIndex = dropTargetIndexRef.current
     if (!draggedBlockId || targetIndex === null) return
@@ -376,8 +365,8 @@ function MarkdownEditor({
     isBlockDragRef.current = false
   }, [])
 
-  // === 파일 드래그 앤 드랍 핸들러 (블록 리오더링 시 무시) ===
-  const handleFileDragEnter = useCallback((e: React.DragEvent) => {
+  // === 컨테이너 드래그 핸들러 (파일 업로드 + 블록 리오더링 통합) ===
+  const handleContainerDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     if (isBlockDragRef.current) return
@@ -387,7 +376,7 @@ function MarkdownEditor({
     }
   }, [])
 
-  const handleFileDragLeave = useCallback((e: React.DragEvent) => {
+  const handleContainerDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     if (isBlockDragRef.current) return
@@ -397,18 +386,50 @@ function MarkdownEditor({
     }
   }, [])
 
-  const handleFileDragOver = useCallback((e: React.DragEvent) => {
+  // 컨테이너 dragOver: 블록 리오더링 시 "가장 가까운 블록 경계" 계산
+  const handleContainerDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
+
+    if (!isBlockDragRef.current || !blocksContainerRef.current) return
+    e.dataTransfer.dropEffect = 'move'
+
+    const blockEls = blocksContainerRef.current.querySelectorAll('[data-block-id]')
+    let nearestIndex = 0
+    let minDistance = Infinity
+
+    blockEls.forEach((el, i) => {
+      const rect = el.getBoundingClientRect()
+      const topDist = Math.abs(e.clientY - rect.top)
+      const bottomDist = Math.abs(e.clientY - rect.bottom)
+
+      if (topDist < minDistance) {
+        minDistance = topDist
+        nearestIndex = i
+      }
+      if (bottomDist < minDistance) {
+        minDistance = bottomDist
+        nearestIndex = i + 1
+      }
+    })
+
+    dropTargetIndexRef.current = nearestIndex
+    setDropTargetIndex(nearestIndex)
   }, [])
 
-  const handleFileDrop = useCallback(async (e: React.DragEvent) => {
+  const handleContainerDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
+
+    // 블록 리오더링
+    if (isBlockDragRef.current) {
+      handleBlockDrop()
+      return
+    }
+
+    // 파일 업로드
     dragCounterRef.current = 0
     setIsDragging(false)
-
-    if (isBlockDragRef.current) return
 
     const files = Array.from(e.dataTransfer.files)
     const imageFiles = files.filter(file => file.type.startsWith('image/'))
@@ -416,7 +437,7 @@ function MarkdownEditor({
     for (const file of imageFiles) {
       await addImageBlock(file)
     }
-  }, [addImageBlock])
+  }, [handleBlockDrop, addImageBlock])
 
   // 붙여넣기 핸들러 (현재 블록 뒤에 이미지 삽입)
   const handlePaste = useCallback(async (e: React.ClipboardEvent, blockId: string) => {
@@ -516,13 +537,14 @@ function MarkdownEditor({
       ) : (
         // 비주얼 모드
         <div
+          ref={blocksContainerRef}
           className={`relative border border-gray-300 rounded-b-lg bg-white min-h-[300px] transition-all ${
             isDragging ? 'ring-2 ring-primary-500 ring-offset-2' : ''
           }`}
-          onDragEnter={handleFileDragEnter}
-          onDragLeave={handleFileDragLeave}
-          onDragOver={handleFileDragOver}
-          onDrop={handleFileDrop}
+          onDragEnter={handleContainerDragEnter}
+          onDragLeave={handleContainerDragLeave}
+          onDragOver={handleContainerDragOver}
+          onDrop={handleContainerDrop}
         >
           <div className="p-4 space-y-1">
             {blocks.map((block, index) => (
@@ -549,13 +571,6 @@ function MarkdownEditor({
                 {/* 블록 (드래그 핸들 + 콘텐츠) */}
                 <div
                   data-block-id={block.id}
-                  onDragOver={(e) => handleBlockDragOver(e, index)}
-                  onDrop={(e) => {
-                    if (!draggedBlockId) return
-                    e.preventDefault()
-                    e.stopPropagation()
-                    handleBlockDrop()
-                  }}
                   className={`flex items-start gap-1 group/block rounded transition-opacity ${
                     draggedBlockId === block.id ? 'opacity-30' : ''
                   }`}
@@ -634,25 +649,9 @@ function MarkdownEditor({
               </div>
             ))}
 
-            {/* 맨 아래 드롭 영역 */}
-            {draggedBlockId && (
-              <div
-                className="h-8"
-                onDragOver={(e) => {
-                  e.preventDefault()
-                  dropTargetIndexRef.current = blocks.length
-                  setDropTargetIndex(blocks.length)
-                }}
-                onDrop={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  handleBlockDrop()
-                }}
-              >
-                {dropTargetIndex === blocks.length && (
-                  <div className="h-0.5 bg-primary-500 rounded" />
-                )}
-              </div>
+            {/* 맨 아래 드롭 표시선 */}
+            {dropTargetIndex === blocks.length && draggedBlockId && (
+              <div className="h-0.5 bg-primary-500 rounded my-1" />
             )}
           </div>
 
