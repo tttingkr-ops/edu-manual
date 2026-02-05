@@ -71,13 +71,11 @@ function ImageUpload({
   const [uploading, setUploading] = useState(false)
   const [preview, setPreview] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const supabase = useMemo(() => createClient(), [])
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
+  const processFile = async (file: File) => {
     setError(null)
 
     // 파일 크기 검증 (MB to bytes)
@@ -130,6 +128,46 @@ function ImageUpload({
     }
   }
 
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    processFile(file)
+  }
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData.items
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image/')) {
+        e.preventDefault()
+        const file = items[i].getAsFile()
+        if (file) processFile(file)
+        break
+      }
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+    const file = e.dataTransfer.files[0]
+    if (file && file.type.startsWith('image/')) {
+      processFile(file)
+    }
+  }
+
   const handleRemove = () => {
     setPreview(null)
     setError(null)
@@ -142,37 +180,50 @@ function ImageUpload({
   return (
     <div className={className}>
       {!preview ? (
-        <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-primary-500 hover:bg-gray-50 transition-colors">
-          <div className="flex flex-col items-center justify-center pt-5 pb-6">
-            <svg
-              className="w-8 h-8 mb-2 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-              />
-            </svg>
-            <p className="text-sm text-gray-500">
-              {uploading ? '업로드 중...' : '클릭하여 이미지 업로드'}
-            </p>
-            <p className="text-xs text-gray-400 mt-1">
-              최대 {maxSizeMB}MB (JPG, PNG, GIF, WEBP)
-            </p>
-          </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            className="hidden"
-            accept="image/jpeg,image/png,image/gif,image/webp"
-            onChange={handleFileSelect}
-            disabled={uploading}
-          />
-        </label>
+        <div
+          onPaste={handlePaste}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          tabIndex={0}
+          className="outline-none"
+        >
+          <label className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+            isDragging
+              ? 'border-primary-500 bg-primary-50'
+              : 'border-gray-300 hover:border-primary-500 hover:bg-gray-50'
+          }`}>
+            <div className="flex flex-col items-center justify-center pt-5 pb-6">
+              <svg
+                className="w-8 h-8 mb-2 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                />
+              </svg>
+              <p className="text-sm text-gray-500">
+                {uploading ? '업로드 중...' : '클릭, 붙여넣기(Ctrl+V) 또는 드래그하여 업로드'}
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                최대 {maxSizeMB}MB (JPG, PNG, GIF, WEBP)
+              </p>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              accept="image/jpeg,image/png,image/gif,image/webp"
+              onChange={handleFileSelect}
+              disabled={uploading}
+            />
+          </label>
+        </div>
       ) : (
         <div className="relative">
           <img

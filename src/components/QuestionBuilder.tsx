@@ -1,7 +1,7 @@
 // Created: 2026-02-01 20:35:00
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import ImageUpload from './ImageUpload'
 
 export type QuestionType = 'multiple_choice' | 'subjective'
@@ -22,6 +22,7 @@ interface QuestionBuilderProps {
   questions: QuestionData[]
   onChange: (questions: QuestionData[]) => void
   category: string
+  content?: string
 }
 
 const emptyQuestion: QuestionData = {
@@ -39,10 +40,89 @@ export default function QuestionBuilder({
   questions,
   onChange,
   category,
+  content,
 }: QuestionBuilderProps) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(
     questions.length > 0 ? 0 : null
   )
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [showAddMenu, setShowAddMenu] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  // Close menu on outside click
+  useEffect(() => {
+    if (!showAddMenu) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowAddMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showAddMenu])
+
+  const generateQuestion = async (questionType: QuestionType) => {
+    if (!content?.trim()) {
+      alert('교육 자료 내용을 먼저 입력해주세요.')
+      return
+    }
+
+    setIsGenerating(true)
+    setShowAddMenu(false)
+
+    try {
+      const response = await fetch('/api/generate-question', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content,
+          questionType,
+          category,
+        }),
+      })
+
+      if (!response.ok) {
+        const err = await response.json()
+        throw new Error(err.error || '생성 실패')
+      }
+
+      const data = await response.json()
+      const q = data.question
+
+      const newQuestion: QuestionData =
+        questionType === 'multiple_choice'
+          ? {
+              question_type: 'multiple_choice',
+              question: q.question || '',
+              question_image_url: null,
+              options: q.options || ['', '', '', ''],
+              correct_answer: q.correct_answer ?? 0,
+              max_score: q.max_score || 10,
+              grading_criteria: null,
+              model_answer: null,
+            }
+          : {
+              question_type: 'subjective',
+              question: q.question || '',
+              question_image_url: null,
+              options: null,
+              correct_answer: null,
+              max_score: q.max_score || 10,
+              grading_criteria: q.grading_criteria || '',
+              model_answer: q.model_answer || '',
+            }
+
+      const newQuestions = [...questions, newQuestion]
+      onChange(newQuestions)
+      setExpandedIndex(newQuestions.length - 1)
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : 'AI 문제 생성에 실패했습니다.'
+      alert(message)
+    } finally {
+      setIsGenerating(false)
+    }
+  }
 
   const addQuestion = () => {
     const newQuestions = [...questions, { ...emptyQuestion }]
@@ -105,16 +185,97 @@ export default function QuestionBuilder({
         <h3 className="text-lg font-semibold text-gray-900">
           테스트 문제 ({questions.length}개)
         </h3>
-        <button
-          type="button"
-          onClick={addQuestion}
-          className="flex items-center gap-2 px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          문제 추가
-        </button>
+        <div className="relative" ref={menuRef}>
+          <button
+            type="button"
+            onClick={() => setShowAddMenu(!showAddMenu)}
+            disabled={isGenerating}
+            className="flex items-center gap-2 px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
+          >
+            {isGenerating ? (
+              <>
+                <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                AI 생성 중...
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                문제 추가
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </>
+            )}
+          </button>
+
+          {showAddMenu && (
+            <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-lg border border-gray-200 z-10 overflow-hidden">
+              <div className="p-2 border-b border-gray-100">
+                <p className="text-xs font-medium text-gray-500 px-2 py-1">객관식 (4지선다)</p>
+                <button
+                  type="button"
+                  onClick={() => generateQuestion('multiple_choice')}
+                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-700 rounded-lg flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                  자동 생성 (AI)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { addQuestion(); setShowAddMenu(false); }}
+                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  수동 입력
+                </button>
+              </div>
+              <div className="p-2">
+                <p className="text-xs font-medium text-gray-500 px-2 py-1">주관식 (AI 채점)</p>
+                <button
+                  type="button"
+                  onClick={() => generateQuestion('subjective')}
+                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-700 rounded-lg flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                  자동 생성 (AI)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newQuestions = [...questions, {
+                      ...emptyQuestion,
+                      question_type: 'subjective' as QuestionType,
+                      options: null,
+                      correct_answer: null,
+                      grading_criteria: '',
+                      model_answer: '',
+                    }]
+                    onChange(newQuestions)
+                    setExpandedIndex(newQuestions.length - 1)
+                    setShowAddMenu(false)
+                  }}
+                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  수동 입력
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {questions.length === 0 ? (

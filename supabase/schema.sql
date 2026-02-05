@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS public.educational_posts (
     content_type TEXT NOT NULL CHECK (content_type IN ('video', 'document')),
     content TEXT NOT NULL,
     category TEXT NOT NULL CHECK (category IN ('남자_매니저_대화', '여자_매니저_대화', '여자_매니저_소개', '추가_서비스_규칙')),
+    images JSONB DEFAULT '[]'::jsonb, -- 첨부 이미지 URL 배열
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     author_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE
@@ -87,14 +88,20 @@ CREATE TABLE IF NOT EXISTS public.test_questions (
     category TEXT NOT NULL,
     sub_category TEXT,
     question TEXT NOT NULL,
-    options JSONB NOT NULL, -- ["옵션1", "옵션2", "옵션3", "옵션4"]
-    correct_answer INTEGER NOT NULL CHECK (correct_answer >= 0 AND correct_answer <= 3),
+    question_type TEXT NOT NULL DEFAULT 'multiple_choice' CHECK (question_type IN ('multiple_choice', 'subjective')),
+    question_image_url TEXT, -- 문제에 첨부된 이미지 (카카오톡 대화 캡처 등)
+    options JSONB, -- ["옵션1", "옵션2", "옵션3", "옵션4"] (객관식만)
+    correct_answer INTEGER CHECK (correct_answer IS NULL OR (correct_answer >= 0 AND correct_answer <= 3)), -- 객관식만
+    max_score INTEGER NOT NULL DEFAULT 10,
+    grading_criteria TEXT, -- 주관식 채점 기준
+    model_answer TEXT, -- 주관식 모범 답안
     related_post_id UUID REFERENCES public.educational_posts(id) ON DELETE SET NULL
 );
 
 -- test_questions 테이블 인덱스
 CREATE INDEX IF NOT EXISTS idx_test_questions_category ON public.test_questions(category);
 CREATE INDEX IF NOT EXISTS idx_test_questions_related_post ON public.test_questions(related_post_id);
+CREATE INDEX IF NOT EXISTS idx_test_questions_type ON public.test_questions(question_type);
 
 -- ============================================
 -- 6. TEST_RESULTS 테이블
@@ -115,6 +122,36 @@ CREATE INDEX IF NOT EXISTS idx_test_results_user_id ON public.test_results(user_
 CREATE INDEX IF NOT EXISTS idx_test_results_category ON public.test_results(category);
 CREATE INDEX IF NOT EXISTS idx_test_results_test_date ON public.test_results(test_date DESC);
 
+-- ============================================
+-- 7. SUBJECTIVE_ANSWERS 테이블 (주관식 답변)
+-- ============================================
+CREATE TABLE IF NOT EXISTS public.subjective_answers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    question_id UUID NOT NULL REFERENCES public.test_questions(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    test_result_id UUID REFERENCES public.test_results(id) ON DELETE SET NULL,
+    answer_text TEXT,
+    image_url TEXT,
+    image_path TEXT,
+    ai_score INTEGER,
+    ai_feedback TEXT, -- JSON 형식으로 저장: {feedback, strengths, improvements}
+    ai_graded_at TIMESTAMP WITH TIME ZONE,
+    admin_score INTEGER,
+    admin_feedback TEXT,
+    admin_reviewed_at TIMESTAMP WITH TIME ZONE,
+    admin_reviewer_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+    final_score INTEGER,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'ai_graded', 'admin_reviewed')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(question_id, user_id)
+);
+
+-- subjective_answers 테이블 인덱스
+CREATE INDEX IF NOT EXISTS idx_subjective_answers_question_id ON public.subjective_answers(question_id);
+CREATE INDEX IF NOT EXISTS idx_subjective_answers_user_id ON public.subjective_answers(user_id);
+CREATE INDEX IF NOT EXISTS idx_subjective_answers_status ON public.subjective_answers(status);
+CREATE INDEX IF NOT EXISTS idx_subjective_answers_created_at ON public.subjective_answers(created_at DESC);
+
 
 -- ============================================
 -- ROW LEVEL SECURITY (RLS) 정책
@@ -127,6 +164,7 @@ ALTER TABLE public.post_groups ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.read_status ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.test_questions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.test_results ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.subjective_answers ENABLE ROW LEVEL SECURITY;
 
 -- --------------------------------------------
 -- USERS 테이블 RLS 정책
@@ -298,6 +336,41 @@ CREATE POLICY "test_results_update_own" ON public.test_results
     FOR UPDATE
     USING (auth.uid() = user_id)
     WITH CHECK (auth.uid() = user_id);
+
+-- --------------------------------------------
+-- SUBJECTIVE_ANSWERS 테이블 RLS 정책
+-- 본인 것만 읽기/쓰기 가능, 관리자는 모두 읽기/수정 가능
+-- --------------------------------------------
+CREATE POLICY "subjective_answers_select_own_or_admin" ON public.subjective_answers
+    FOR SELECT
+    USING (
+        auth.uid() = user_id
+        OR EXISTS (
+            SELECT 1 FROM public.users
+            WHERE id = auth.uid() AND role = 'admin'
+        )
+    );
+
+CREATE POLICY "subjective_answers_insert_own" ON public.subjective_answers
+    FOR INSERT
+    WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "subjective_answers_update_own_or_admin" ON public.subjective_answers
+    FOR UPDATE
+    USING (
+        (auth.uid() = user_id AND status != 'admin_reviewed')
+        OR EXISTS (
+            SELECT 1 FROM public.users
+            WHERE id = auth.uid() AND role = 'admin'
+        )
+    )
+    WITH CHECK (
+        (auth.uid() = user_id AND status != 'admin_reviewed')
+        OR EXISTS (
+            SELECT 1 FROM public.users
+            WHERE id = auth.uid() AND role = 'admin'
+        )
+    );
 
 
 -- ============================================

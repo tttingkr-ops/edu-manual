@@ -2,6 +2,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import PostCard from '@/components/PostCard'
 
 interface Post {
@@ -47,6 +48,29 @@ export default function EducationContent({ posts }: EducationContentProps) {
         <p className="mt-2 text-gray-600">
           각 카테고리별 교육 자료를 학습하세요. 미확인 자료는 강조 표시됩니다.
         </p>
+      </div>
+
+      {/* 테스트 바로가기 */}
+      <div className="mb-6">
+        <Link
+          href="/manager/test"
+          className="block bg-gradient-to-r from-primary-50 to-blue-50 border border-primary-200 rounded-xl p-4 hover:shadow-md transition-all group"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-primary-500 rounded-lg flex items-center justify-center text-white text-xl">
+                📝
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900">테스트 응시하기</p>
+                <p className="text-sm text-gray-600">학습한 내용을 테스트로 확인해보세요</p>
+              </div>
+            </div>
+            <svg className="w-5 h-5 text-gray-400 group-hover:text-primary-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
+        </Link>
       </div>
 
       {/* 탭 네비게이션 */}

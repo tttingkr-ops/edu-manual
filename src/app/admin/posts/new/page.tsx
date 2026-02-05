@@ -460,6 +460,7 @@ export default function NewPostPage() {
                 questions={questions}
                 onChange={setQuestions}
                 category={formData.category}
+                content={formData.content}
               />
             </>
           )}

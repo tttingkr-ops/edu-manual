@@ -9,7 +9,6 @@ const CATEGORIES = [
     description: '남자 매니저를 위한 고객 응대 및 대화 스킬 테스트',
     icon: '👨‍💼',
     color: 'bg-blue-500',
-    questions: 5,
   },
   {
     id: '여자_매니저_대화',
@@ -17,7 +16,6 @@ const CATEGORIES = [
     description: '여자 매니저를 위한 고객 응대 및 대화 스킬 테스트',
     icon: '👩‍💼',
     color: 'bg-pink-500',
-    questions: 5,
   },
   {
     id: '여자_매니저_소개',
@@ -25,7 +23,6 @@ const CATEGORIES = [
     description: '효과적인 자기소개 방법 및 첫인상 관리 테스트',
     icon: '🎤',
     color: 'bg-purple-500',
-    questions: 5,
   },
   {
     id: '추가_서비스_규칙',
@@ -33,7 +30,6 @@ const CATEGORIES = [
     description: '추가 서비스 제공 시 준수해야 할 규칙 테스트',
     icon: '📋',
     color: 'bg-orange-500',
-    questions: 5,
   },
 ]
 
@@ -44,6 +40,18 @@ export default async function TestListPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser()
+
+  // 모든 테스트 문제 조회하여 카테고리별 개수 계산
+  const { data: allQuestions } = await supabase
+    .from('test_questions')
+    .select('category')
+
+  const countByCategory: Record<string, number> = {}
+  allQuestions?.forEach((q: any) => {
+    countByCategory[q.category] = (countByCategory[q.category] || 0) + 1
+  })
+
+  const totalQuestions = allQuestions?.length || 0
 
   // 사용자의 최근 테스트 결과 조회
   const { data: recentResults } = await supabase
@@ -79,7 +87,9 @@ export default async function TestListPage() {
             <div className="text-4xl">📝</div>
           </div>
           <div className="mt-4 flex items-center gap-4 text-sm">
-            <span className="bg-white/20 px-3 py-1 rounded-full">20문제</span>
+            <span className="bg-white/20 px-3 py-1 rounded-full">
+              총 {totalQuestions}문제
+            </span>
             <span className="bg-white/20 px-3 py-1 rounded-full">전 카테고리</span>
           </div>
         </Link>
@@ -89,28 +99,40 @@ export default async function TestListPage() {
       <div className="mb-8">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">카테고리별 테스트</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {CATEGORIES.map((category) => (
-            <Link
-              key={category.id}
-              href={`/manager/test/${encodeURIComponent(category.id)}`}
-              className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow"
-            >
-              <div className="flex items-start gap-4">
-                <div
-                  className={`w-12 h-12 ${category.color} rounded-xl flex items-center justify-center text-2xl`}
-                >
-                  {category.icon}
+          {CATEGORIES.map((category) => {
+            const questionCount = countByCategory[category.id] || 0
+            const hasQuestions = questionCount > 0
+
+            return (
+              <Link
+                key={category.id}
+                href={hasQuestions ? `/manager/test/${encodeURIComponent(category.id)}` : '#'}
+                className={`bg-white rounded-xl border border-gray-200 p-5 transition-shadow ${
+                  hasQuestions
+                    ? 'hover:shadow-md cursor-pointer'
+                    : 'opacity-50 cursor-not-allowed'
+                }`}
+                onClick={(e) => {
+                  if (!hasQuestions) e.preventDefault()
+                }}
+              >
+                <div className="flex items-start gap-4">
+                  <div
+                    className={`w-12 h-12 ${category.color} rounded-xl flex items-center justify-center text-2xl`}
+                  >
+                    {category.icon}
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-gray-900">{category.title}</h3>
+                    <p className="text-sm text-gray-500 mt-1">{category.description}</p>
+                    <p className={`text-xs mt-2 ${hasQuestions ? 'text-gray-400' : 'text-red-500'}`}>
+                      {hasQuestions ? `${questionCount}문제` : '문제 없음'}
+                    </p>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900">{category.title}</h3>
-                  <p className="text-sm text-gray-500 mt-1">{category.description}</p>
-                  <p className="text-xs text-gray-400 mt-2">
-                    {category.questions}문제
-                  </p>
-                </div>
-              </div>
-            </Link>
-          ))}
+              </Link>
+            )
+          })}
         </div>
       </div>
 
