@@ -128,8 +128,12 @@ function MarkdownEditor({
   const [isDragging, setIsDragging] = useState(false)
   const [showCodeMode, setShowCodeMode] = useState(false)
   const [codeValue, setCodeValue] = useState(value)
+  const [draggedBlockId, setDraggedBlockId] = useState<string | null>(null)
+  const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null)
   const dragCounterRef = useRef(0)
   const isInternalChangeRef = useRef(false)
+  const isBlockDragRef = useRef(false)
+  const dropTargetIndexRef = useRef<number | null>(null)
   const focusBlockIdRef = useRef<string | null>(null)
   const textareaRefsMap = useRef<Map<string, HTMLTextAreaElement>>(new Map())
   const supabase = useMemo(() => createClient(), [])
@@ -300,35 +304,111 @@ function MarkdownEditor({
     updateBlocks(newBlocks)
   }, [blocks, updateBlocks])
 
-  // 드래그 앤 드랍 핸들러
-  const handleDragEnter = useCallback((e: React.DragEvent) => {
+  // 텍스트 블록 삭제 (마지막 블록은 삭제 불가)
+  const removeTextBlock = useCallback((blockId: string) => {
+    const blockIndex = blocks.findIndex(b => b.id === blockId)
+    if (blockIndex < 0 || blockIndex === blocks.length - 1) return
+    const newBlocks = blocks.filter(b => b.id !== blockId)
+    updateBlocks(newBlocks)
+  }, [blocks, updateBlocks])
+
+  // === 블록 순서 변경 (드래그 앤 드롭) ===
+  const handleBlockDragStart = useCallback((e: React.DragEvent, blockId: string) => {
+    isBlockDragRef.current = true
+    const blockEl = (e.currentTarget as HTMLElement).closest('[data-block-id]') as HTMLElement
+    if (blockEl) {
+      e.dataTransfer.setDragImage(blockEl, 20, 20)
+    }
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/block-id', blockId)
+    setDraggedBlockId(blockId)
+  }, [])
+
+  const handleBlockDragOver = useCallback((e: React.DragEvent, index: number) => {
+    if (!draggedBlockId) return
     e.preventDefault()
     e.stopPropagation()
+    e.dataTransfer.dropEffect = 'move'
+    const rect = e.currentTarget.getBoundingClientRect()
+    const midY = rect.top + rect.height / 2
+    const insertIndex = e.clientY < midY ? index : index + 1
+    dropTargetIndexRef.current = insertIndex
+    setDropTargetIndex(insertIndex)
+  }, [draggedBlockId])
+
+  const handleBlockDrop = useCallback(() => {
+    const targetIndex = dropTargetIndexRef.current
+    if (!draggedBlockId || targetIndex === null) return
+
+    const sourceIndex = blocks.findIndex(b => b.id === draggedBlockId)
+    if (sourceIndex < 0 || sourceIndex === targetIndex || sourceIndex + 1 === targetIndex) {
+      setDraggedBlockId(null)
+      setDropTargetIndex(null)
+      isBlockDragRef.current = false
+      return
+    }
+
+    const newBlocks = [...blocks]
+    const [moved] = newBlocks.splice(sourceIndex, 1)
+    const adjusted = targetIndex > sourceIndex ? targetIndex - 1 : targetIndex
+    newBlocks.splice(adjusted, 0, moved)
+
+    // 마지막 블록이 텍스트가 아니면 추가
+    if (newBlocks[newBlocks.length - 1].type !== 'text') {
+      newBlocks.push({
+        id: `block-${Date.now()}`,
+        type: 'text' as const,
+        content: '',
+      })
+    }
+
+    setDraggedBlockId(null)
+    setDropTargetIndex(null)
+    dropTargetIndexRef.current = null
+    isBlockDragRef.current = false
+    updateBlocks(newBlocks)
+  }, [draggedBlockId, blocks, updateBlocks])
+
+  const handleBlockDragEnd = useCallback(() => {
+    setDraggedBlockId(null)
+    setDropTargetIndex(null)
+    dropTargetIndexRef.current = null
+    isBlockDragRef.current = false
+  }, [])
+
+  // === 파일 드래그 앤 드랍 핸들러 (블록 리오더링 시 무시) ===
+  const handleFileDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (isBlockDragRef.current) return
     dragCounterRef.current++
     if (e.dataTransfer.types.includes('Files')) {
       setIsDragging(true)
     }
   }, [])
 
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
+  const handleFileDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
+    if (isBlockDragRef.current) return
     dragCounterRef.current--
     if (dragCounterRef.current === 0) {
       setIsDragging(false)
     }
   }, [])
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
+  const handleFileDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
   }, [])
 
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
+  const handleFileDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     dragCounterRef.current = 0
     setIsDragging(false)
+
+    if (isBlockDragRef.current) return
 
     const files = Array.from(e.dataTransfer.files)
     const imageFiles = files.filter(file => file.type.startsWith('image/'))
@@ -439,16 +519,21 @@ function MarkdownEditor({
           className={`relative border border-gray-300 rounded-b-lg bg-white min-h-[300px] transition-all ${
             isDragging ? 'ring-2 ring-primary-500 ring-offset-2' : ''
           }`}
-          onDragEnter={handleDragEnter}
-          onDragLeave={handleDragLeave}
-          onDragOver={handleDragOver}
-          onDrop={handleDrop}
+          onDragEnter={handleFileDragEnter}
+          onDragLeave={handleFileDragLeave}
+          onDragOver={handleFileDragOver}
+          onDrop={handleFileDrop}
         >
-          <div className="p-4 space-y-2">
+          <div className="p-4 space-y-1">
             {blocks.map((block, index) => (
               <div key={block.id}>
-                {/* 이미지 사이에 텍스트 삽입 버튼 */}
-                {index > 0 && block.type === 'image' && blocks[index - 1].type === 'image' && (
+                {/* 드롭 위치 표시선 */}
+                {dropTargetIndex === index && draggedBlockId && draggedBlockId !== block.id && (
+                  <div className="h-0.5 bg-primary-500 rounded my-1" />
+                )}
+
+                {/* 이미지 사이 텍스트 삽입 버튼 (드래그 중 숨김) */}
+                {index > 0 && block.type === 'image' && blocks[index - 1].type === 'image' && !draggedBlockId && (
                   <div
                     className="flex items-center gap-2 py-1 cursor-pointer group/insert"
                     onClick={() => insertTextBlockAt(index)}
@@ -461,45 +546,117 @@ function MarkdownEditor({
                   </div>
                 )}
 
-                {block.type === 'image' ? (
-                  // 이미지 블록
-                  <div className="relative group my-2">
-                    <img
-                      src={block.content}
-                      alt={block.alt || '이미지'}
-                      className="max-w-full h-auto rounded-lg border border-gray-200 shadow-sm"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeImageBlock(block.id)}
-                      className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
-                      title="이미지 삭제"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
+                {/* 블록 (드래그 핸들 + 콘텐츠) */}
+                <div
+                  data-block-id={block.id}
+                  onDragOver={(e) => handleBlockDragOver(e, index)}
+                  onDrop={(e) => {
+                    if (!draggedBlockId) return
+                    e.preventDefault()
+                    e.stopPropagation()
+                    handleBlockDrop()
+                  }}
+                  className={`flex items-start gap-1 group/block rounded transition-opacity ${
+                    draggedBlockId === block.id ? 'opacity-30' : ''
+                  }`}
+                >
+                  {/* 드래그 핸들 */}
+                  <div
+                    draggable
+                    onDragStart={(e) => handleBlockDragStart(e, block.id)}
+                    onDragEnd={handleBlockDragEnd}
+                    className="flex-shrink-0 mt-2 px-0.5 cursor-grab active:cursor-grabbing opacity-0 group-hover/block:opacity-100 transition-opacity select-none"
+                    title="드래그하여 순서 변경"
+                  >
+                    <svg className="w-4 h-5 text-gray-300 hover:text-gray-500" viewBox="0 0 16 20" fill="currentColor">
+                      <circle cx="5" cy="4" r="1.5"/>
+                      <circle cx="11" cy="4" r="1.5"/>
+                      <circle cx="5" cy="10" r="1.5"/>
+                      <circle cx="11" cy="10" r="1.5"/>
+                      <circle cx="5" cy="16" r="1.5"/>
+                      <circle cx="11" cy="16" r="1.5"/>
+                    </svg>
                   </div>
-                ) : (
-                  // 텍스트 블록
-                  <textarea
-                    ref={(el) => {
-                      if (el) textareaRefsMap.current.set(block.id, el)
-                      else textareaRefsMap.current.delete(block.id)
-                    }}
-                    value={block.content}
-                    onChange={(e) => updateTextBlock(block.id, e.target.value)}
-                    onPaste={(e) => handlePaste(e, block.id)}
-                    className="w-full px-0 py-2 border-0 focus:ring-0 resize-none text-gray-900 placeholder-gray-400"
-                    rows={Math.max(2, block.content.split('\n').length)}
-                    placeholder={placeholder || '내용을 입력하세요...'}
-                  />
-                )}
+
+                  {/* 블록 콘텐츠 */}
+                  <div className="flex-1 min-w-0">
+                    {block.type === 'image' ? (
+                      // 이미지 블록
+                      <div className="relative group my-1">
+                        <img
+                          src={block.content}
+                          alt={block.alt || '이미지'}
+                          className="max-w-full h-auto rounded-lg border border-gray-200 shadow-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeImageBlock(block.id)}
+                          className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                          title="이미지 삭제"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ) : (
+                      // 텍스트 블록
+                      <div className="relative">
+                        <textarea
+                          ref={(el) => {
+                            if (el) textareaRefsMap.current.set(block.id, el)
+                            else textareaRefsMap.current.delete(block.id)
+                          }}
+                          value={block.content}
+                          onChange={(e) => updateTextBlock(block.id, e.target.value)}
+                          onPaste={(e) => handlePaste(e, block.id)}
+                          className="w-full px-0 py-2 border-0 focus:ring-0 resize-none text-gray-900 placeholder-gray-400"
+                          rows={Math.max(2, block.content.split('\n').length)}
+                          placeholder={placeholder || '내용을 입력하세요...'}
+                        />
+                        {/* 텍스트 블록 삭제 (마지막 블록 제외) */}
+                        {index !== blocks.length - 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeTextBlock(block.id)}
+                            className="absolute top-1 right-1 p-1 text-gray-300 hover:text-red-500 rounded opacity-0 group-hover/block:opacity-100 transition-all"
+                            title="텍스트 블록 삭제"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             ))}
+
+            {/* 맨 아래 드롭 영역 */}
+            {draggedBlockId && (
+              <div
+                className="h-8"
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  dropTargetIndexRef.current = blocks.length
+                  setDropTargetIndex(blocks.length)
+                }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  handleBlockDrop()
+                }}
+              >
+                {dropTargetIndex === blocks.length && (
+                  <div className="h-0.5 bg-primary-500 rounded" />
+                )}
+              </div>
+            )}
           </div>
 
-          {/* 드래그 오버레이 */}
+          {/* 파일 드래그 오버레이 */}
           {isDragging && (
             <div className="absolute inset-0 flex items-center justify-center bg-primary-50 bg-opacity-95 border-2 border-dashed border-primary-400 rounded-lg z-10">
               <div className="text-center">
@@ -515,7 +672,7 @@ function MarkdownEditor({
 
       {/* 도움말 */}
       <p className="text-xs text-gray-500">
-        이미지를 드래그하거나 Ctrl+V로 붙여넣을 수 있습니다. 코드 모드에서 마크다운을 직접 편집할 수 있습니다.
+        이미지: 드래그 또는 Ctrl+V로 붙여넣기 | 블록 왼쪽 ⠿ 핸들로 순서 변경 | 코드 모드에서 마크다운 직접 편집
       </p>
     </div>
   )
