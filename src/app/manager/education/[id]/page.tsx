@@ -31,20 +31,21 @@ export default async function PostDetailPage({ params }: PageProps) {
     notFound()
   }
 
-  // 관련 테스트 문제 존재 여부 확인
-  const { data: testQuestions } = await supabase
+  // 관련 테스트 문제 조회
+  const { data: relatedQuestions } = await supabase
     .from('test_questions')
-    .select('id')
+    .select('id, question, question_type, question_image_url, options, correct_answer, max_score')
     .eq('related_post_id', id)
-    .limit(1)
-
-  const hasRelatedTest = (testQuestions?.length || 0) > 0
 
   return (
     <PostDetail
       post={post}
       userId={user.id}
-      hasRelatedTest={hasRelatedTest}
+      hasRelatedTest={(relatedQuestions?.length || 0) > 0}
+      relatedQuestions={(relatedQuestions || []).map(q => ({
+        ...q,
+        options: q.options as string[] | null,
+      }))}
     />
   )
 }

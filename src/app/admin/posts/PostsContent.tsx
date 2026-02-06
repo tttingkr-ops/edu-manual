@@ -268,7 +268,12 @@ export default function PostsContent({ posts: initialPosts }: PostsContentProps)
 
                 {/* 제목 & 정보 */}
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-medium text-gray-900 truncate">{post.title}</h3>
+                  <Link
+                    href={`/manager/education/${post.id}`}
+                    className="font-medium text-gray-900 truncate block hover:text-primary-600 transition-colors"
+                  >
+                    {post.title}
+                  </Link>
                   <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
                     <span>{formatDate(post.created_at)}</span>
                     <span>{post.content_type === 'video' ? '동영상' : '문서'}</span>

@@ -32,6 +32,7 @@ interface Post {
   id: string
   title: string
   category: string
+  content: string
 }
 
 interface TestsContentProps {
@@ -76,12 +77,26 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
     const fetchPosts = async () => {
       const { data } = await supabase
         .from('educational_posts')
-        .select('id, title, category')
+        .select('id, title, category, content')
         .order('title')
       setPosts(data || [])
     }
     fetchPosts()
   }, [])
+
+  // 선택된 교육 자료에서 이미지 URL 추출
+  const getPostImages = (postId: string | null): string[] => {
+    if (!postId) return []
+    const post = posts.find(p => p.id === postId)
+    if (!post?.content) return []
+    const imgRegex = /!\[.*?\]\((https?:\/\/[^\s)]+)\)/g
+    const images: string[] = []
+    let match
+    while ((match = imgRegex.exec(post.content)) !== null) {
+      images.push(match[1])
+    }
+    return images
+  }
 
   // 필터링된 문제 목록 (useMemo로 최적화)
   const filteredQuestions = useMemo(() => {
@@ -315,16 +330,21 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
       {/* 카테고리별 통계 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {CATEGORIES.map((cat) => (
-          <div
+          <button
             key={cat.value}
-            className="bg-white rounded-xl border border-gray-200 p-4"
+            onClick={() => setFilterCategory(filterCategory === cat.value ? 'all' : cat.value)}
+            className={`bg-white rounded-xl border-2 p-4 text-left transition-all hover:shadow-md cursor-pointer ${
+              filterCategory === cat.value
+                ? 'border-primary-500 ring-2 ring-primary-100'
+                : 'border-gray-200 hover:border-gray-300'
+            }`}
           >
-            <p className="text-sm text-gray-500">{cat.label}</p>
-            <p className="text-2xl font-bold text-gray-900">
+            <p className={`text-sm ${filterCategory === cat.value ? 'text-primary-600 font-medium' : 'text-gray-500'}`}>{cat.label}</p>
+            <p className={`text-2xl font-bold ${filterCategory === cat.value ? 'text-primary-700' : 'text-gray-900'}`}>
               {getCategoryCount(cat.value)}
               <span className="text-sm font-normal text-gray-500 ml-1">문제</span>
             </p>
-          </div>
+          </button>
         ))}
       </div>
 
@@ -702,12 +722,42 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
                     </button>
                   </div>
                 ) : (
-                  <ImageUpload
-                    onUpload={(url) => setFormData({ ...formData, question_image_url: url })}
-                    maxSizeMB={10}
-                    bucket="education-images"
-                    folder={`questions/${formData.category}`}
-                  />
+                  <div className="space-y-3">
+                    {/* 교육 자료 이미지 선택 */}
+                    {formData.related_post_id && getPostImages(formData.related_post_id).length > 0 && (
+                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <p className="text-sm font-medium text-blue-800 mb-2">
+                          교육 자료 이미지에서 선택
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {getPostImages(formData.related_post_id).map((imgUrl, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => setFormData({ ...formData, question_image_url: imgUrl })}
+                              className="relative group border-2 border-transparent hover:border-blue-500 rounded-lg overflow-hidden transition-all"
+                            >
+                              <img
+                                src={imgUrl}
+                                alt={`교육 자료 이미지 ${i + 1}`}
+                                className="h-20 w-auto object-cover rounded"
+                              />
+                              <div className="absolute inset-0 bg-blue-600 bg-opacity-0 group-hover:bg-opacity-20 flex items-center justify-center transition-all">
+                                <span className="text-white opacity-0 group-hover:opacity-100 text-xs font-medium">선택</span>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {/* 직접 업로드 */}
+                    <ImageUpload
+                      onUpload={(url) => setFormData({ ...formData, question_image_url: url })}
+                      maxSizeMB={10}
+                      bucket="education-images"
+                      folder={`questions/${formData.category}`}
+                    />
+                  </div>
                 )}
               </div>
 

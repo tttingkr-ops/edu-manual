@@ -1,7 +1,7 @@
 // Created: 2026-01-27 16:30:00
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
@@ -18,19 +18,32 @@ interface Post {
   author_id: string
 }
 
+interface RelatedQuestion {
+  id: string
+  question: string
+  question_type: 'multiple_choice' | 'subjective'
+  question_image_url: string | null
+  options: string[] | null
+  correct_answer: number | null
+  max_score: number
+}
+
 interface PostDetailProps {
   post: Post
   userId: string
   hasRelatedTest: boolean
+  relatedQuestions?: RelatedQuestion[]
 }
 
 export default function PostDetail({
   post,
   userId,
   hasRelatedTest,
+  relatedQuestions = [],
 }: PostDetailProps) {
   const router = useRouter()
   const supabase = createClient()
+  const [showRelatedTests, setShowRelatedTests] = useState(false)
 
   // 페이지 진입 시 읽음 상태 업데이트
   useEffect(() => {
@@ -204,9 +217,13 @@ export default function PostDetail({
         </Link>
 
         {hasRelatedTest && (
-          <Link
-            href={`/manager/test/${encodeURIComponent(post.category)}`}
-            className="flex-1 px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-lg text-center transition-colors flex items-center justify-center gap-2"
+          <button
+            onClick={() => setShowRelatedTests(!showRelatedTests)}
+            className={`flex-1 px-6 py-3 font-medium rounded-lg text-center transition-colors flex items-center justify-center gap-2 ${
+              showRelatedTests
+                ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                : 'bg-primary-600 hover:bg-primary-700 text-white'
+            }`}
           >
             <svg
               className="w-5 h-5"
@@ -221,10 +238,74 @@ export default function PostDetail({
                 d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
               />
             </svg>
-            관련 테스트 보기
-          </Link>
+            {showRelatedTests ? '테스트 숨기기' : `관련 테스트 보기 (${relatedQuestions.length}문제)`}
+          </button>
         )}
       </div>
+
+      {/* 관련 테스트 문제 목록 */}
+      {showRelatedTests && relatedQuestions.length > 0 && (
+        <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="p-4 bg-primary-50 border-b border-primary-100">
+            <h2 className="font-semibold text-primary-900">
+              관련 테스트 문제 ({relatedQuestions.length}개)
+            </h2>
+            <p className="text-sm text-primary-700 mt-1">이 교육 자료와 연결된 테스트 문제입니다.</p>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {relatedQuestions.map((q, index) => (
+              <div key={q.id} className="p-4">
+                <div className="flex items-start gap-3">
+                  <span className="flex-shrink-0 w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-sm font-medium text-gray-600">
+                    {index + 1}
+                  </span>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                        q.question_type === 'multiple_choice'
+                          ? 'bg-blue-100 text-blue-700'
+                          : 'bg-purple-100 text-purple-700'
+                      }`}>
+                        {q.question_type === 'multiple_choice' ? '객관식' : '주관식'}
+                      </span>
+                      <span className="text-xs text-gray-500">{q.max_score}점</span>
+                    </div>
+                    <p className="text-gray-900 font-medium">{q.question}</p>
+                    {q.question_image_url && (
+                      <img src={q.question_image_url} alt="문제 이미지" className="mt-2 max-h-32 rounded border" />
+                    )}
+                    {q.question_type === 'multiple_choice' && q.options && (
+                      <div className="mt-2 grid grid-cols-2 gap-1.5 text-sm">
+                        {q.options.map((opt, i) => (
+                          <div
+                            key={i}
+                            className={`p-1.5 rounded ${
+                              i === q.correct_answer
+                                ? 'bg-green-50 text-green-800 font-medium'
+                                : 'bg-gray-50 text-gray-600'
+                            }`}
+                          >
+                            {i + 1}. {opt}
+                            {i === q.correct_answer && <span className="ml-1 text-green-600">✓</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="p-4 bg-gray-50 border-t border-gray-200">
+            <Link
+              href={`/manager/test/${encodeURIComponent(post.category)}`}
+              className="w-full block text-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
+            >
+              이 카테고리 테스트 응시하기
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* 학습 완료 알림 */}
       <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3">
