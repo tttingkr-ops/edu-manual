@@ -105,34 +105,38 @@ export default async function TestListPage() {
             const questionCount = countByCategory[category.id] || 0
             const hasQuestions = questionCount > 0
 
-            return (
+            const content = (
+              <div className="flex items-start gap-4">
+                <div
+                  className={`w-12 h-12 ${category.color} rounded-xl flex items-center justify-center text-2xl`}
+                >
+                  {category.icon}
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-gray-900">{category.title}</h3>
+                  <p className="text-sm text-gray-500 mt-1">{category.description}</p>
+                  <p className={`text-xs mt-2 ${hasQuestions ? 'text-gray-400' : 'text-red-500'}`}>
+                    {hasQuestions ? `${questionCount}문제` : '문제 없음'}
+                  </p>
+                </div>
+              </div>
+            )
+
+            return hasQuestions ? (
               <Link
                 key={category.id}
-                href={hasQuestions ? `/manager/test/${encodeURIComponent(category.id)}` : '#'}
-                className={`bg-white rounded-xl border border-gray-200 p-5 transition-shadow ${
-                  hasQuestions
-                    ? 'hover:shadow-md cursor-pointer'
-                    : 'opacity-50 cursor-not-allowed'
-                }`}
-                onClick={(e) => {
-                  if (!hasQuestions) e.preventDefault()
-                }}
+                href={`/manager/test/${encodeURIComponent(category.id)}`}
+                className="bg-white rounded-xl border border-gray-200 p-5 transition-shadow hover:shadow-md cursor-pointer"
               >
-                <div className="flex items-start gap-4">
-                  <div
-                    className={`w-12 h-12 ${category.color} rounded-xl flex items-center justify-center text-2xl`}
-                  >
-                    {category.icon}
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-gray-900">{category.title}</h3>
-                    <p className="text-sm text-gray-500 mt-1">{category.description}</p>
-                    <p className={`text-xs mt-2 ${hasQuestions ? 'text-gray-400' : 'text-red-500'}`}>
-                      {hasQuestions ? `${questionCount}문제` : '문제 없음'}
-                    </p>
-                  </div>
-                </div>
+                {content}
               </Link>
+            ) : (
+              <div
+                key={category.id}
+                className="bg-white rounded-xl border border-gray-200 p-5 opacity-50 cursor-not-allowed"
+              >
+                {content}
+              </div>
             )
           })}
         </div>
