@@ -23,6 +23,7 @@ interface QuestionBuilderProps {
   onChange: (questions: QuestionData[]) => void
   category: string
   content?: string
+  uploadedImages?: string[]
 }
 
 const emptyQuestion: QuestionData = {
@@ -41,6 +42,7 @@ export default function QuestionBuilder({
   onChange,
   category,
   content,
+  uploadedImages = [],
 }: QuestionBuilderProps) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(
     questions.length > 0 ? 0 : null
@@ -424,12 +426,42 @@ export default function QuestionBuilder({
                         </button>
                       </div>
                     ) : (
-                      <ImageUpload
-                        onUpload={(url) => handleImageUpload(index, url)}
-                        maxSizeMB={10}
-                        bucket="education-images"
-                        folder={`questions/${category}`}
-                      />
+                      <div className="space-y-3">
+                        {/* 교육 자료 이미지 선택 */}
+                        {uploadedImages.length > 0 && (
+                          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                            <p className="text-sm font-medium text-blue-800 mb-2">
+                              교육 자료 이미지에서 선택
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {uploadedImages.map((imgUrl, i) => (
+                                <button
+                                  key={i}
+                                  type="button"
+                                  onClick={() => handleImageUpload(index, imgUrl)}
+                                  className="relative group border-2 border-transparent hover:border-blue-500 rounded-lg overflow-hidden transition-all"
+                                >
+                                  <img
+                                    src={imgUrl}
+                                    alt={`교육 자료 이미지 ${i + 1}`}
+                                    className="h-20 w-auto object-cover rounded"
+                                  />
+                                  <div className="absolute inset-0 bg-blue-600 bg-opacity-0 group-hover:bg-opacity-20 flex items-center justify-center transition-all">
+                                    <span className="text-white opacity-0 group-hover:opacity-100 text-xs font-medium bg-blue-600 px-2 py-1 rounded">선택</span>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {/* 직접 업로드 */}
+                        <ImageUpload
+                          onUpload={(url) => handleImageUpload(index, url)}
+                          maxSizeMB={10}
+                          bucket="education-images"
+                          folder={`questions/${category}`}
+                        />
+                      </div>
                     )}
                   </div>
 
