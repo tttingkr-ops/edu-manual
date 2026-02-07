@@ -14,17 +14,22 @@ export default async function EducationPage() {
     return null
   }
 
-  // 모든 교육 게시물 조회
-  const { data: posts } = await supabase
-    .from('educational_posts')
-    .select('*')
-    .order('created_at', { ascending: false })
-
-  // 사용자의 읽음 상태 조회
-  const { data: readStatuses } = await supabase
-    .from('read_status')
-    .select('post_id, is_read')
-    .eq('user_id', user.id)
+  // 모든 교육 게시물 + 서브카테고리 + 읽음 상태 조회
+  const [{ data: posts }, { data: readStatuses }, { data: subCategories }] = await Promise.all([
+    supabase
+      .from('educational_posts')
+      .select('*')
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('read_status')
+      .select('post_id, is_read')
+      .eq('user_id', user.id),
+    supabase
+      .from('sub_categories')
+      .select('*')
+      .order('sort_order')
+      .order('name'),
+  ])
 
   // 읽음 상태를 Map으로 변환
   const readStatusMap = new Map(
@@ -37,5 +42,5 @@ export default async function EducationPage() {
     isRead: readStatusMap.get(post.id) || false,
   }))
 
-  return <EducationContent posts={postsWithReadStatus} />
+  return <EducationContent posts={postsWithReadStatus} subCategories={subCategories || []} />
 }

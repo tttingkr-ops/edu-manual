@@ -3,7 +3,7 @@
 // Updated: 2026-02-03 - 마크다운 에디터 드래그앤드랍 이미지 업로드 지원
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -27,6 +27,13 @@ const GROUPS: { value: GroupName; label: string }[] = [
   { value: '여자_매니저_소개', label: '여자 매니저 소개' },
 ]
 
+interface SubCategory {
+  id: string
+  category: string
+  name: string
+  sort_order: number
+}
+
 export default function NewPostPage() {
   const router = useRouter()
   const supabase = createClient()
@@ -36,12 +43,73 @@ export default function NewPostPage() {
   const [includeTest, setIncludeTest] = useState(false)
   const [questions, setQuestions] = useState<QuestionData[]>([])
   const [uploadedImages, setUploadedImages] = useState<string[]>([])
+  const [subCategories, setSubCategories] = useState<SubCategory[]>([])
+  const [selectedSubCategory, setSelectedSubCategory] = useState<string>('')
+  const [isAddingNewSubCategory, setIsAddingNewSubCategory] = useState(false)
+  const [newSubCategoryName, setNewSubCategoryName] = useState('')
   const [formData, setFormData] = useState({
     title: '',
     content_type: 'document' as ContentType,
     content: '',
     category: '남자_매니저_대화' as Category,
   })
+
+  // 서브카테고리 목록 조회
+  useEffect(() => {
+    const fetchSubCategories = async () => {
+      const { data } = await supabase
+        .from('sub_categories')
+        .select('*')
+        .order('sort_order')
+        .order('name')
+      setSubCategories(data || [])
+    }
+    fetchSubCategories()
+  }, [])
+
+  // 카테고리 변경 시 서브카테고리 초기화
+  useEffect(() => {
+    setSelectedSubCategory('')
+    setIsAddingNewSubCategory(false)
+    setNewSubCategoryName('')
+  }, [formData.category])
+
+  // 현재 카테고리의 서브카테고리
+  const currentSubCategories = subCategories.filter(sc => sc.category === formData.category)
+
+  // 새 서브카테고리 추가 핸들러
+  const handleAddNewSubCategory = async () => {
+    const name = newSubCategoryName.trim()
+    if (!name) return
+
+    try {
+      const { data, error } = await supabase
+        .from('sub_categories')
+        .insert({
+          category: formData.category,
+          name,
+          sort_order: currentSubCategories.length,
+        })
+        .select()
+        .single()
+
+      if (error) {
+        if (error.code === '23505') {
+          alert('이미 존재하는 유형입니다.')
+        } else {
+          throw error
+        }
+        return
+      }
+
+      setSubCategories([...subCategories, data])
+      setSelectedSubCategory(name)
+      setIsAddingNewSubCategory(false)
+      setNewSubCategoryName('')
+    } catch (err: any) {
+      alert(err.message || '유형 추가 중 오류가 발생했습니다.')
+    }
+  }
 
   // 그룹 토글 핸들러
   const handleGroupToggle = (group: GroupName, checked: boolean) => {
@@ -96,6 +164,7 @@ export default function NewPostPage() {
           content_type: formData.content_type,
           content: formData.content,
           category: formData.category,
+          sub_category: selectedSubCategory || null,
           author_id: user.id,
         })
         .select()
@@ -214,6 +283,69 @@ export default function NewPostPage() {
                   </option>
                 ))}
               </select>
+            </div>
+
+            {/* 서브카테고리 (유형) */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                유형 (서브카테고리)
+              </label>
+              {isAddingNewSubCategory ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={newSubCategoryName}
+                    onChange={(e) => setNewSubCategoryName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { e.preventDefault(); handleAddNewSubCategory() }
+                      if (e.key === 'Escape') { setIsAddingNewSubCategory(false); setNewSubCategoryName('') }
+                    }}
+                    placeholder="새 유형 이름"
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddNewSubCategory}
+                    className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
+                  >
+                    추가
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setIsAddingNewSubCategory(false); setNewSubCategoryName('') }}
+                    className="px-4 py-2 text-gray-500 hover:text-gray-700 text-sm"
+                  >
+                    취소
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <select
+                    value={selectedSubCategory}
+                    onChange={(e) => {
+                      if (e.target.value === '__new__') {
+                        setIsAddingNewSubCategory(true)
+                        setSelectedSubCategory('')
+                      } else {
+                        setSelectedSubCategory(e.target.value)
+                      }
+                    }}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  >
+                    <option value="">선택 안함</option>
+                    {currentSubCategories.map((sc) => (
+                      <option key={sc.id} value={sc.name}>
+                        {sc.name}
+                      </option>
+                    ))}
+                    <option value="__new__">+ 새 유형 추가...</option>
+                  </select>
+                </div>
+              )}
+              <p className="mt-1 text-sm text-gray-500">
+                카테고리 내 세부 유형을 선택하세요 (선택사항).
+              </p>
             </div>
 
             {/* 대상 그룹 */}
@@ -423,46 +555,13 @@ export default function NewPostPage() {
           </div>
 
           {includeTest && (
-            <>
-              {/* 업로드된 이미지에서 선택 */}
-              {uploadedImages.length > 0 && (
-                <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-sm font-medium text-blue-800 mb-2">
-                    교육 자료에 업로드된 이미지를 문제에 사용할 수 있습니다
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {uploadedImages.map((url, index) => (
-                      <div key={index} className="relative group">
-                        <img
-                          src={url}
-                          alt={`업로드 이미지 ${index + 1}`}
-                          className="w-20 h-20 object-cover rounded border border-blue-300"
-                        />
-                        <div className="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity rounded flex items-center justify-center">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              navigator.clipboard.writeText(url)
-                              alert('이미지 URL이 복사되었습니다. 문제 이미지에 붙여넣기 하세요.')
-                            }}
-                            className="text-xs text-white bg-blue-600 px-2 py-1 rounded"
-                          >
-                            URL 복사
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <QuestionBuilder
-                questions={questions}
-                onChange={setQuestions}
-                category={formData.category}
-                content={formData.content}
-              />
-            </>
+            <QuestionBuilder
+              questions={questions}
+              onChange={setQuestions}
+              category={formData.category}
+              content={formData.content}
+              uploadedImages={uploadedImages}
+            />
           )}
         </div>
 

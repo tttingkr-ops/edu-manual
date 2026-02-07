@@ -2,6 +2,7 @@
 // Updated: 2026-01-29 - Supabase 실제 연동, 게시글 연결 기능 추가
 // Updated: 2026-02-02 - 문제 이미지 업로드 기능 추가
 // Updated: 2026-02-03 - 성능 최적화 (페이지네이션, useMemo, useCallback)
+// Updated: 2026-02-07 - 서브카테고리 DB 기반 드롭다운으로 변경
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
@@ -33,6 +34,13 @@ interface Post {
   title: string
   category: string
   content: string
+}
+
+interface SubCategory {
+  id: string
+  category: string
+  name: string
+  sort_order: number
 }
 
 interface TestsContentProps {
@@ -70,19 +78,38 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
     related_post_id: null as string | null,
   })
 
+  const [subCategories, setSubCategories] = useState<SubCategory[]>([])
+  const [filterSubCategory, setFilterSubCategory] = useState<string | 'all'>('all')
+
   const supabase = createClient()
 
-  // 게시글 목록 조회
+  // 게시글 + 서브카테고리 목록 조회
   useEffect(() => {
-    const fetchPosts = async () => {
-      const { data } = await supabase
-        .from('educational_posts')
-        .select('id, title, category, content')
-        .order('title')
-      setPosts(data || [])
+    const fetchData = async () => {
+      const [{ data: postsData }, { data: subCatsData }] = await Promise.all([
+        supabase
+          .from('educational_posts')
+          .select('id, title, category, content')
+          .order('title'),
+        supabase
+          .from('sub_categories')
+          .select('*')
+          .order('sort_order')
+          .order('name'),
+      ])
+      setPosts(postsData || [])
+      setSubCategories(subCatsData || [])
     }
-    fetchPosts()
+    fetchData()
   }, [])
+
+  // 현재 폼 카테고리의 서브카테고리
+  const formSubCategories = subCategories.filter(sc => sc.category === formData.category)
+
+  // 필터용: 현재 필터 카테고리의 서브카테고리
+  const filterSubCategories = filterCategory !== 'all'
+    ? subCategories.filter(sc => sc.category === filterCategory)
+    : []
 
   // 선택된 교육 자료에서 이미지 URL 추출
   const getPostImages = (postId: string | null): string[] => {
@@ -102,10 +129,11 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
   const filteredQuestions = useMemo(() => {
     return questions.filter((q) => {
       const matchesCategory = filterCategory === 'all' || q.category === filterCategory
+      const matchesSubCategory = filterSubCategory === 'all' || q.sub_category === filterSubCategory
       const matchesSearch = q.question.toLowerCase().includes(searchTerm.toLowerCase())
-      return matchesCategory && matchesSearch
+      return matchesCategory && matchesSubCategory && matchesSearch
     })
-  }, [questions, filterCategory, searchTerm])
+  }, [questions, filterCategory, filterSubCategory, searchTerm])
 
   // 페이지네이션 적용된 문제 목록
   const paginatedQuestions = useMemo(() => {
@@ -118,7 +146,12 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
   // 필터 변경 시 페이지 초기화
   useEffect(() => {
     setCurrentPage(1)
-  }, [filterCategory, searchTerm])
+  }, [filterCategory, filterSubCategory, searchTerm])
+
+  // 카테고리 필터 변경 시 서브카테고리 필터 초기화
+  useEffect(() => {
+    setFilterSubCategory('all')
+  }, [filterCategory])
 
   // 카테고리별 문제 수 (useMemo로 최적화)
   const categoryCounts = useMemo(() => {
@@ -392,6 +425,24 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
               ))}
             </select>
           </div>
+
+          {/* 서브카테고리 필터 */}
+          {filterCategory !== 'all' && filterSubCategories.length > 0 && (
+            <div>
+              <select
+                value={filterSubCategory}
+                onChange={(e) => setFilterSubCategory(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              >
+                <option value="all">모든 유형</option>
+                {filterSubCategories.map((sc) => (
+                  <option key={sc.id} value={sc.name}>
+                    {sc.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       </div>
 
@@ -597,17 +648,20 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    세부 카테고리
+                    유형 (서브카테고리)
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={formData.sub_category}
                     onChange={(e) =>
                       setFormData({ ...formData, sub_category: e.target.value })
                     }
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    placeholder="예: 기본 인사"
-                  />
+                  >
+                    <option value="">선택 안함</option>
+                    {formSubCategories.map((sc) => (
+                      <option key={sc.id} value={sc.name}>{sc.name}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 

@@ -1,4 +1,5 @@
 // Created: 2026-01-27 16:30:00
+// Updated: 2026-02-07 - 서브카테고리 필터 칩 추가
 'use client'
 
 import { useState } from 'react'
@@ -11,14 +12,23 @@ interface Post {
   content_type: 'video' | 'document'
   content: string
   category: string
+  sub_category: string | null
   created_at: string
   updated_at: string
   author_id: string
   isRead: boolean
 }
 
+interface SubCategory {
+  id: string
+  category: string
+  name: string
+  sort_order: number
+}
+
 interface EducationContentProps {
   posts: Post[]
+  subCategories: SubCategory[]
 }
 
 const CATEGORIES = [
@@ -28,11 +38,25 @@ const CATEGORIES = [
   { id: '추가_서비스_규칙', label: '추가 서비스 규칙' },
 ]
 
-export default function EducationContent({ posts }: EducationContentProps) {
+export default function EducationContent({ posts, subCategories }: EducationContentProps) {
   const [activeTab, setActiveTab] = useState(CATEGORIES[0].id)
+  const [activeSubCategory, setActiveSubCategory] = useState<string | null>(null)
+
+  // 현재 탭의 서브카테고리
+  const currentSubCategories = subCategories.filter(sc => sc.category === activeTab)
+
+  // 탭 변경 시 서브카테고리 초기화
+  const handleTabChange = (categoryId: string) => {
+    setActiveTab(categoryId)
+    setActiveSubCategory(null)
+  }
 
   // 현재 탭의 게시물 필터링
-  const filteredPosts = posts.filter((post) => post.category === activeTab)
+  const filteredPosts = posts.filter((post) => {
+    const matchesCategory = post.category === activeTab
+    const matchesSubCategory = activeSubCategory === null || post.sub_category === activeSubCategory
+    return matchesCategory && matchesSubCategory
+  })
 
   // 미확인 게시물 수 계산
   const getUnreadCount = (categoryId: string) => {
@@ -84,7 +108,7 @@ export default function EducationContent({ posts }: EducationContentProps) {
               return (
                 <button
                   key={category.id}
-                  onClick={() => setActiveTab(category.id)}
+                  onClick={() => handleTabChange(category.id)}
                   className={`relative flex-shrink-0 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                     isActive
                       ? 'border-primary-500 text-primary-600'
@@ -110,6 +134,35 @@ export default function EducationContent({ posts }: EducationContentProps) {
         </div>
       </div>
 
+      {/* 서브카테고리 필터 칩 */}
+      {currentSubCategories.length > 0 && (
+        <div className="mb-6 flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setActiveSubCategory(null)}
+            className={`px-3 py-1.5 text-sm rounded-full border transition-colors ${
+              activeSubCategory === null
+                ? 'bg-primary-600 text-white border-primary-600'
+                : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+            }`}
+          >
+            전체
+          </button>
+          {currentSubCategories.map((sc) => (
+            <button
+              key={sc.id}
+              onClick={() => setActiveSubCategory(activeSubCategory === sc.name ? null : sc.name)}
+              className={`px-3 py-1.5 text-sm rounded-full border transition-colors ${
+                activeSubCategory === sc.name
+                  ? 'bg-primary-600 text-white border-primary-600'
+                  : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              {sc.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* 게시물 목록 */}
       <div className="space-y-4">
         {filteredPosts.length === 0 ? (
@@ -131,7 +184,9 @@ export default function EducationContent({ posts }: EducationContentProps) {
               게시물 없음
             </h3>
             <p className="mt-1 text-sm text-gray-500">
-              이 카테고리에는 아직 교육 자료가 없습니다.
+              {activeSubCategory
+                ? `"${activeSubCategory}" 유형에 교육 자료가 없습니다.`
+                : '이 카테고리에는 아직 교육 자료가 없습니다.'}
             </p>
           </div>
         ) : (

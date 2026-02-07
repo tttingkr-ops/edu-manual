@@ -2,7 +2,7 @@
 // Updated: 2026-01-29 - Supabase 실제 연동, 그룹 선택 UI 추가
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -17,9 +17,17 @@ interface Post {
   content_type: ContentType
   content: string
   category: Category
+  sub_category: string | null
   created_at: string
   updated_at: string
   author_id: string
+}
+
+interface SubCategory {
+  id: string
+  category: string
+  name: string
+  sort_order: number
 }
 
 interface EditPostContentProps {
@@ -46,12 +54,63 @@ export default function EditPostContent({ post, initialGroups }: EditPostContent
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedGroups, setSelectedGroups] = useState<GroupName[]>(initialGroups)
+  const [subCategories, setSubCategories] = useState<SubCategory[]>([])
+  const [selectedSubCategory, setSelectedSubCategory] = useState<string>(post.sub_category || '')
+  const [isAddingNewSubCategory, setIsAddingNewSubCategory] = useState(false)
+  const [newSubCategoryName, setNewSubCategoryName] = useState('')
   const [formData, setFormData] = useState({
     title: post.title,
     content_type: post.content_type,
     content: post.content,
     category: post.category,
   })
+
+  // 서브카테고리 목록 조회
+  useEffect(() => {
+    const fetchSubCategories = async () => {
+      const { data } = await supabase
+        .from('sub_categories')
+        .select('*')
+        .order('sort_order')
+        .order('name')
+      setSubCategories(data || [])
+    }
+    fetchSubCategories()
+  }, [])
+
+  // 현재 카테고리의 서브카테고리
+  const currentSubCategories = subCategories.filter(sc => sc.category === formData.category)
+
+  // 카테고리 변경 시 서브카테고리 초기화
+  useEffect(() => {
+    if (formData.category !== post.category) {
+      setSelectedSubCategory('')
+    }
+  }, [formData.category])
+
+  // 새 서브카테고리 추가
+  const handleAddNewSubCategory = async () => {
+    const name = newSubCategoryName.trim()
+    if (!name) return
+    try {
+      const { data, error } = await supabase
+        .from('sub_categories')
+        .insert({ category: formData.category, name, sort_order: currentSubCategories.length })
+        .select()
+        .single()
+      if (error) {
+        if (error.code === '23505') alert('이미 존재하는 유형입니다.')
+        else throw error
+        return
+      }
+      setSubCategories([...subCategories, data])
+      setSelectedSubCategory(name)
+      setIsAddingNewSubCategory(false)
+      setNewSubCategoryName('')
+    } catch (err: any) {
+      alert(err.message || '유형 추가 중 오류가 발생했습니다.')
+    }
+  }
 
   // 그룹 토글 핸들러
   const handleGroupToggle = (group: GroupName, checked: boolean) => {
@@ -81,6 +140,7 @@ export default function EditPostContent({ post, initialGroups }: EditPostContent
           content_type: formData.content_type,
           content: formData.content,
           category: formData.category,
+          sub_category: selectedSubCategory || null,
         })
         .eq('id', post.id)
 
@@ -212,6 +272,65 @@ export default function EditPostContent({ post, initialGroups }: EditPostContent
                   </option>
                 ))}
               </select>
+            </div>
+
+            {/* 서브카테고리 (유형) */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                유형 (서브카테고리)
+              </label>
+              {isAddingNewSubCategory ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={newSubCategoryName}
+                    onChange={(e) => setNewSubCategoryName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { e.preventDefault(); handleAddNewSubCategory() }
+                      if (e.key === 'Escape') { setIsAddingNewSubCategory(false); setNewSubCategoryName('') }
+                    }}
+                    placeholder="새 유형 이름"
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddNewSubCategory}
+                    className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
+                  >
+                    추가
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setIsAddingNewSubCategory(false); setNewSubCategoryName('') }}
+                    className="px-4 py-2 text-gray-500 hover:text-gray-700 text-sm"
+                  >
+                    취소
+                  </button>
+                </div>
+              ) : (
+                <select
+                  value={selectedSubCategory}
+                  onChange={(e) => {
+                    if (e.target.value === '__new__') {
+                      setIsAddingNewSubCategory(true)
+                      setSelectedSubCategory('')
+                    } else {
+                      setSelectedSubCategory(e.target.value)
+                    }
+                  }}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                >
+                  <option value="">선택 안함</option>
+                  {currentSubCategories.map((sc) => (
+                    <option key={sc.id} value={sc.name}>{sc.name}</option>
+                  ))}
+                  <option value="__new__">+ 새 유형 추가...</option>
+                </select>
+              )}
+              <p className="mt-1 text-sm text-gray-500">
+                카테고리 내 세부 유형을 선택하세요 (선택사항).
+              </p>
             </div>
 
             {/* 대상 그룹 */}

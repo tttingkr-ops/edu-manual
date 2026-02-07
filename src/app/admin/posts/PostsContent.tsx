@@ -1,8 +1,9 @@
 // Created: 2026-01-27 17:15:00
 // Updated: 2026-01-30 - 카테고리 탭 UI, 노션 가져오기 기능 추가
+// Updated: 2026-02-06 - 서브카테고리(유형) 관리 UI 추가
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -21,11 +22,19 @@ interface Post {
   content_type: ContentType
   content: string
   category: Category
+  sub_category: string | null
   created_at: string
   updated_at: string
   author_id: string
   unreadCount: number
   unreadManagers: UnreadManager[]
+}
+
+interface SubCategory {
+  id: string
+  category: string
+  name: string
+  sort_order: number
 }
 
 interface PostsContentProps {
@@ -43,6 +52,7 @@ export default function PostsContent({ posts: initialPosts }: PostsContentProps)
   const router = useRouter()
   const [posts, setPosts] = useState<Post[]>(initialPosts)
   const [activeCategory, setActiveCategory] = useState<Category>(CATEGORIES[0].value)
+  const [activeSubCategory, setActiveSubCategory] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [showUnreadModal, setShowUnreadModal] = useState(false)
@@ -53,18 +63,116 @@ export default function PostsContent({ posts: initialPosts }: PostsContentProps)
   const [notionLoading, setNotionLoading] = useState(false)
   const [notionError, setNotionError] = useState<string | null>(null)
 
+  // 서브카테고리 상태
+  const [subCategories, setSubCategories] = useState<SubCategory[]>([])
+  const [isAddingSubCategory, setIsAddingSubCategory] = useState(false)
+  const [newSubCategoryName, setNewSubCategoryName] = useState('')
+
   const supabase = createClient()
+
+  // 서브카테고리 목록 조회
+  useEffect(() => {
+    const fetchSubCategories = async () => {
+      const { data } = await supabase
+        .from('sub_categories')
+        .select('*')
+        .order('sort_order')
+        .order('name')
+      setSubCategories(data || [])
+    }
+    fetchSubCategories()
+  }, [])
+
+  // 카테고리 변경 시 서브카테고리 필터 초기화
+  useEffect(() => {
+    setActiveSubCategory(null)
+  }, [activeCategory])
+
+  // 현재 카테고리의 서브카테고리
+  const currentSubCategories = subCategories.filter(sc => sc.category === activeCategory)
 
   // 현재 카테고리의 게시물
   const categoryPosts = posts.filter((post) => {
     const matchesCategory = post.category === activeCategory
+    const matchesSubCategory = activeSubCategory === null || post.sub_category === activeSubCategory
     const matchesSearch = post.title.toLowerCase().includes(searchTerm.toLowerCase())
-    return matchesCategory && matchesSearch
+    return matchesCategory && matchesSubCategory && matchesSearch
   })
 
   // 카테고리별 게시물 수
   const getCategoryCount = (category: Category) => {
     return posts.filter((p) => p.category === category).length
+  }
+
+  // 서브카테고리 추가
+  const handleAddSubCategory = async () => {
+    const name = newSubCategoryName.trim()
+    if (!name) return
+
+    try {
+      const { data, error } = await supabase
+        .from('sub_categories')
+        .insert({
+          category: activeCategory,
+          name,
+          sort_order: currentSubCategories.length,
+        })
+        .select()
+        .single()
+
+      if (error) {
+        if (error.code === '23505') {
+          alert('이미 존재하는 유형입니다.')
+        } else {
+          throw error
+        }
+        return
+      }
+
+      setSubCategories([...subCategories, data])
+      setNewSubCategoryName('')
+      setIsAddingSubCategory(false)
+    } catch (err: any) {
+      console.error('Error adding sub_category:', err)
+      alert(err.message || '유형 추가 중 오류가 발생했습니다.')
+    }
+  }
+
+  // 서브카테고리 삭제
+  const handleDeleteSubCategory = async (subCat: SubCategory) => {
+    if (!confirm(`"${subCat.name}" 유형을 삭제하시겠습니까?\n이 유형에 속한 게시물의 유형 정보가 비워집니다.`)) return
+
+    try {
+      // 서브카테고리 삭제
+      const { error } = await supabase
+        .from('sub_categories')
+        .delete()
+        .eq('id', subCat.id)
+
+      if (error) throw error
+
+      // 해당 서브카테고리가 지정된 게시물의 sub_category를 null로
+      await supabase
+        .from('educational_posts')
+        .update({ sub_category: null })
+        .eq('category', subCat.category as Category)
+        .eq('sub_category', subCat.name)
+
+      setSubCategories(subCategories.filter(sc => sc.id !== subCat.id))
+      if (activeSubCategory === subCat.name) {
+        setActiveSubCategory(null)
+      }
+
+      // 게시물 목록도 업데이트
+      setPosts(posts.map(p =>
+        p.category === subCat.category && p.sub_category === subCat.name
+          ? { ...p, sub_category: null }
+          : p
+      ))
+    } catch (err: any) {
+      console.error('Error deleting sub_category:', err)
+      alert(err.message || '유형 삭제 중 오류가 발생했습니다.')
+    }
   }
 
   // 미확인 매니저 모달 열기
@@ -247,6 +355,91 @@ export default function PostsContent({ posts: initialPosts }: PostsContentProps)
         </div>
       </div>
 
+      {/* 서브카테고리 (유형) 필터 */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-medium text-gray-600 mr-1">유형:</span>
+          <button
+            onClick={() => setActiveSubCategory(null)}
+            className={`px-3 py-1.5 text-sm rounded-full border transition-colors ${
+              activeSubCategory === null
+                ? 'bg-primary-600 text-white border-primary-600'
+                : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+            }`}
+          >
+            전체
+          </button>
+          {currentSubCategories.map((sc) => (
+            <div key={sc.id} className="flex items-center gap-0.5">
+              <button
+                onClick={() => setActiveSubCategory(activeSubCategory === sc.name ? null : sc.name)}
+                className={`px-3 py-1.5 text-sm rounded-l-full border transition-colors ${
+                  activeSubCategory === sc.name
+                    ? 'bg-primary-600 text-white border-primary-600'
+                    : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                {sc.name}
+                <span className="ml-1 text-xs opacity-70">
+                  ({posts.filter(p => p.category === activeCategory && p.sub_category === sc.name).length})
+                </span>
+              </button>
+              <button
+                onClick={() => handleDeleteSubCategory(sc)}
+                className={`px-1.5 py-1.5 text-sm rounded-r-full border border-l-0 transition-colors ${
+                  activeSubCategory === sc.name
+                    ? 'bg-primary-700 text-white border-primary-600 hover:bg-primary-800'
+                    : 'bg-white text-gray-400 border-gray-300 hover:text-red-500 hover:bg-red-50'
+                }`}
+                title="유형 삭제"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          ))}
+          {isAddingSubCategory ? (
+            <div className="flex items-center gap-1">
+              <input
+                type="text"
+                value={newSubCategoryName}
+                onChange={(e) => setNewSubCategoryName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleAddSubCategory()
+                  if (e.key === 'Escape') { setIsAddingSubCategory(false); setNewSubCategoryName('') }
+                }}
+                placeholder="유형 이름"
+                className="w-28 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                autoFocus
+              />
+              <button
+                onClick={handleAddSubCategory}
+                className="px-2 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+              >
+                추가
+              </button>
+              <button
+                onClick={() => { setIsAddingSubCategory(false); setNewSubCategoryName('') }}
+                className="px-2 py-1.5 text-sm text-gray-500 hover:text-gray-700"
+              >
+                취소
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setIsAddingSubCategory(true)}
+              className="flex items-center gap-1 px-3 py-1.5 text-sm text-primary-600 border border-dashed border-primary-300 rounded-full hover:bg-primary-50 transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              유형 추가
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* 게시물 목록 */}
       {categoryPosts.length > 0 ? (
         <div className="space-y-3">
@@ -277,6 +470,11 @@ export default function PostsContent({ posts: initialPosts }: PostsContentProps)
                   <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
                     <span>{formatDate(post.created_at)}</span>
                     <span>{post.content_type === 'video' ? '동영상' : '문서'}</span>
+                    {post.sub_category && (
+                      <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">
+                        {post.sub_category}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -342,7 +540,7 @@ export default function PostsContent({ posts: initialPosts }: PostsContentProps)
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
           <p className="text-gray-500 mb-4">
-            {searchTerm ? '검색 결과가 없습니다.' : `${activeCategoryInfo.label} 카테고리에 등록된 교육 자료가 없습니다.`}
+            {searchTerm ? '검색 결과가 없습니다.' : activeSubCategory ? `"${activeSubCategory}" 유형에 등록된 교육 자료가 없습니다.` : `${activeCategoryInfo.label} 카테고리에 등록된 교육 자료가 없습니다.`}
           </p>
           <div className="flex justify-center gap-3">
             <button
@@ -452,10 +650,10 @@ export default function PostsContent({ posts: initialPosts }: PostsContentProps)
               <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <h4 className="font-medium text-blue-800 mb-2">지원하는 콘텐츠</h4>
                 <ul className="text-sm text-blue-700 space-y-1">
-                  <li>• 텍스트, 제목, 목록</li>
-                  <li>• 이미지 (외부 링크)</li>
-                  <li>• YouTube/Vimeo 영상</li>
-                  <li>• 테이블, 인용문</li>
+                  <li>- 텍스트, 제목, 목록</li>
+                  <li>- 이미지 (외부 링크)</li>
+                  <li>- YouTube/Vimeo 영상</li>
+                  <li>- 테이블, 인용문</li>
                 </ul>
               </div>
             </div>
