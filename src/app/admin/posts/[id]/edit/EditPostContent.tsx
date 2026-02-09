@@ -18,6 +18,7 @@ interface Post {
   content: string
   category: Category
   sub_category: string | null
+  external_link: string | null
   created_at: string
   updated_at: string
   author_id: string
@@ -58,6 +59,7 @@ export default function EditPostContent({ post, initialGroups }: EditPostContent
   const [selectedSubCategory, setSelectedSubCategory] = useState<string>(post.sub_category || '')
   const [isAddingNewSubCategory, setIsAddingNewSubCategory] = useState(false)
   const [newSubCategoryName, setNewSubCategoryName] = useState('')
+  const [externalLink, setExternalLink] = useState(post.external_link || '')
   const [formData, setFormData] = useState({
     title: post.title,
     content_type: post.content_type,
@@ -141,6 +143,7 @@ export default function EditPostContent({ post, initialGroups }: EditPostContent
           content: formData.content,
           category: formData.category,
           sub_category: selectedSubCategory || null,
+          external_link: externalLink.trim() || null,
         })
         .eq('id', post.id)
 
@@ -330,6 +333,23 @@ export default function EditPostContent({ post, initialGroups }: EditPostContent
               )}
               <p className="mt-1 text-sm text-gray-500">
                 카테고리 내 세부 유형을 선택하세요 (선택사항).
+              </p>
+            </div>
+
+            {/* 외부 링크 (Flow 등) */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                외부 링크 (Flow 등)
+              </label>
+              <input
+                type="url"
+                value={externalLink}
+                onChange={(e) => setExternalLink(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                placeholder="https://flow.team/l/..."
+              />
+              <p className="mt-1 text-sm text-gray-500">
+                Flow 등 외부 협업 툴의 링크를 입력하면 매니저가 원본 자료를 볼 수 있습니다.
               </p>
             </div>
 

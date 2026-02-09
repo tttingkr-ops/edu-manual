@@ -6,7 +6,17 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import ImageUpload from '@/components/ImageUpload'
+
+// Parse question_image_url - handles both single URL (legacy) and JSON array
+function parseQuestionImages(val: string | null): string[] {
+  if (!val) return []
+  try {
+    const parsed = JSON.parse(val)
+    return Array.isArray(parsed) ? parsed : [val]
+  } catch {
+    return val ? [val] : []
+  }
+}
 
 interface Question {
   id: string
@@ -62,6 +72,7 @@ export default function TestContent({
   const [showResult, setShowResult] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [gradingErrors, setGradingErrors] = useState<Record<string, string>>({})
 
   const currentQuestion = questions[currentIndex]
   const isMultipleChoice = currentQuestion?.question_type === 'multiple_choice'
@@ -146,6 +157,10 @@ export default function TestContent({
       }))
     } catch (error) {
       console.error('Grading error:', error)
+      setGradingErrors(prev => ({
+        ...prev,
+        [questionId]: 'AI 채점에 실패했습니다. 다시 시도해주세요.',
+      }))
     } finally {
       setGradingInProgress(prev => {
         const next = new Set(prev)
@@ -479,15 +494,18 @@ export default function TestContent({
           Q{currentIndex + 1}. {currentQuestion.question}
         </h2>
 
-        {/* 문제 이미지 */}
-        {currentQuestion.question_image_url && (
-          <div className="mb-6">
-            <img
-              src={currentQuestion.question_image_url}
-              alt="문제 상황 이미지"
-              className="max-w-full rounded-lg border border-gray-200 shadow-sm"
-            />
-            <p className="text-sm text-gray-500 mt-2 text-center">위 상황을 보고 답변해주세요.</p>
+        {/* 문제 이미지 (복수 지원) */}
+        {parseQuestionImages(currentQuestion.question_image_url).length > 0 && (
+          <div className="mb-6 space-y-3">
+            {parseQuestionImages(currentQuestion.question_image_url).map((imgUrl, i) => (
+              <img
+                key={i}
+                src={imgUrl}
+                alt={`문제 상황 이미지 ${i + 1}`}
+                className="max-w-full rounded-lg border border-gray-200 shadow-sm"
+              />
+            ))}
+            <p className="text-sm text-gray-500 text-center">위 상황을 보고 답변해주세요.</p>
           </div>
         )}
 
@@ -537,20 +555,6 @@ export default function TestContent({
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                이미지 첨부 (선택)
-              </label>
-              <p className="text-sm text-gray-500 mb-2">
-                카카오톡 대화 캡처 등 참고 이미지를 첨부할 수 있습니다.
-              </p>
-              <ImageUpload
-                onUpload={(url, path) => handleImageUpload(currentQuestion.id, url, path)}
-                maxSizeMB={5}
-                folder={`answers/${currentQuestion.id}`}
-              />
-            </div>
-
             {/* AI 채점 버튼 */}
             <div className="flex justify-end">
               <button
@@ -581,6 +585,13 @@ export default function TestContent({
                 )}
               </button>
             </div>
+
+            {/* AI 채점 에러 표시 */}
+            {gradingErrors[currentQuestion.id] && !gradingResults[currentQuestion.id] && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-600">{gradingErrors[currentQuestion.id]}</p>
+              </div>
+            )}
 
             {/* AI 채점 결과 미리보기 */}
             {gradingResults[currentQuestion.id] && (

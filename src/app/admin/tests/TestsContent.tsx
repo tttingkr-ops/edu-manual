@@ -10,6 +10,22 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import ImageUpload from '@/components/ImageUpload'
 
+// Parse question_image_url - handles both single URL (legacy) and JSON array
+function parseQuestionImages(val: string | null): string[] {
+  if (!val) return []
+  try {
+    const parsed = JSON.parse(val)
+    return Array.isArray(parsed) ? parsed : [val]
+  } catch {
+    return val ? [val] : []
+  }
+}
+
+function serializeQuestionImages(urls: string[]): string | null {
+  if (urls.length === 0) return null
+  return JSON.stringify(urls)
+}
+
 const ITEMS_PER_PAGE = 20
 
 type Category = '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개' | '추가_서비스_규칙'
@@ -477,14 +493,17 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
                       <p className="font-medium text-gray-900 mb-2">
                         {question.question}
                       </p>
-                      {question.question_image_url && (
-                        <div className="mb-2">
-                          <img
-                            src={question.question_image_url}
-                            alt="문제 이미지"
-                            loading="lazy"
-                            className="max-h-24 rounded border"
-                          />
+                      {parseQuestionImages(question.question_image_url).length > 0 && (
+                        <div className="mb-2 flex flex-wrap gap-1">
+                          {parseQuestionImages(question.question_image_url).map((imgUrl, i) => (
+                            <img
+                              key={i}
+                              src={imgUrl}
+                              alt={`문제 이미지 ${i + 1}`}
+                              loading="lazy"
+                              className="max-h-24 rounded border"
+                            />
+                          ))}
                         </div>
                       )}
                     {question.question_type === 'subjective' ? (
@@ -753,66 +772,103 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
               {/* 문제 이미지 */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  문제 이미지 (선택)
+                  문제 이미지 (선택, 복수 선택 가능)
                 </label>
                 <p className="text-sm text-gray-500 mb-2">
                   카카오톡 대화 캡처 등 상황 이미지를 첨부하면 &quot;위 상황에서 올바른 응대 방법은?&quot; 형식의 문제를 만들 수 있습니다.
                 </p>
-                {formData.question_image_url ? (
-                  <div className="relative inline-block">
-                    <img
-                      src={formData.question_image_url}
-                      alt="문제 이미지"
-                      className="max-h-40 rounded-lg border"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setFormData({ ...formData, question_image_url: '' })}
-                      className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
+                {/* 선택된 이미지 미리보기 */}
+                {parseQuestionImages(formData.question_image_url).length > 0 && (
+                  <div className="mb-3">
+                    <p className="text-sm font-medium text-gray-600 mb-2">
+                      선택된 이미지 ({parseQuestionImages(formData.question_image_url).length}개)
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {parseQuestionImages(formData.question_image_url).map((imgUrl, i) => (
+                        <div key={i} className="relative inline-block">
+                          <img
+                            src={imgUrl}
+                            alt={`문제 이미지 ${i + 1}`}
+                            className="h-24 w-auto rounded-lg border object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const urls = parseQuestionImages(formData.question_image_url).filter(u => u !== imgUrl)
+                              setFormData({ ...formData, question_image_url: serializeQuestionImages(urls) || '' })
+                            }}
+                            className="absolute -top-1 -right-1 p-0.5 bg-red-500 text-white rounded-full hover:bg-red-600"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                ) : (
-                  <div className="space-y-3">
-                    {/* 교육 자료 이미지 선택 */}
-                    {formData.related_post_id && getPostImages(formData.related_post_id).length > 0 && (
-                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                        <p className="text-sm font-medium text-blue-800 mb-2">
-                          교육 자료 이미지에서 선택
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          {getPostImages(formData.related_post_id).map((imgUrl, i) => (
+                )}
+                <div className="space-y-3">
+                  {/* 교육 자료 이미지 선택 (토글) */}
+                  {formData.related_post_id && getPostImages(formData.related_post_id).length > 0 && (
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <p className="text-sm font-medium text-blue-800 mb-2">
+                        교육 자료 이미지에서 선택 (클릭하여 추가/제거)
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {getPostImages(formData.related_post_id).map((imgUrl, i) => {
+                          const isSelected = parseQuestionImages(formData.question_image_url).includes(imgUrl)
+                          return (
                             <button
                               key={i}
                               type="button"
-                              onClick={() => setFormData({ ...formData, question_image_url: imgUrl })}
-                              className="relative group border-2 border-transparent hover:border-blue-500 rounded-lg overflow-hidden transition-all"
+                              onClick={() => {
+                                const current = parseQuestionImages(formData.question_image_url)
+                                const newUrls = isSelected
+                                  ? current.filter(u => u !== imgUrl)
+                                  : [...current, imgUrl]
+                                setFormData({ ...formData, question_image_url: serializeQuestionImages(newUrls) || '' })
+                              }}
+                              className={`relative group border-2 rounded-lg overflow-hidden transition-all ${
+                                isSelected
+                                  ? 'border-blue-500 ring-2 ring-blue-300'
+                                  : 'border-transparent hover:border-blue-300'
+                              }`}
                             >
                               <img
                                 src={imgUrl}
                                 alt={`교육 자료 이미지 ${i + 1}`}
                                 className="h-20 w-auto object-cover rounded"
                               />
-                              <div className="absolute inset-0 bg-blue-600 bg-opacity-0 group-hover:bg-opacity-20 flex items-center justify-center transition-all">
-                                <span className="text-white opacity-0 group-hover:opacity-100 text-xs font-medium">선택</span>
-                              </div>
+                              {isSelected && (
+                                <div className="absolute top-1 right-1 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
+                                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                </div>
+                              )}
+                              {!isSelected && (
+                                <div className="absolute inset-0 bg-blue-600 bg-opacity-0 group-hover:bg-opacity-10 transition-all" />
+                              )}
                             </button>
-                          ))}
-                        </div>
+                          )
+                        })}
                       </div>
-                    )}
-                    {/* 직접 업로드 */}
-                    <ImageUpload
-                      onUpload={(url) => setFormData({ ...formData, question_image_url: url })}
-                      maxSizeMB={10}
-                      bucket="education-images"
-                      folder={`questions/${formData.category}`}
-                    />
-                  </div>
-                )}
+                    </div>
+                  )}
+                  {/* 직접 업로드 */}
+                  <ImageUpload
+                    onUpload={(url) => {
+                      const current = parseQuestionImages(formData.question_image_url)
+                      if (!current.includes(url)) {
+                        setFormData({ ...formData, question_image_url: serializeQuestionImages([...current, url]) || '' })
+                      }
+                    }}
+                    maxSizeMB={10}
+                    bucket="education-images"
+                    folder={`questions/${formData.category}`}
+                  />
+                </div>
               </div>
 
               {/* 배점 */}

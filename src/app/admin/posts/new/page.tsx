@@ -47,6 +47,7 @@ export default function NewPostPage() {
   const [selectedSubCategory, setSelectedSubCategory] = useState<string>('')
   const [isAddingNewSubCategory, setIsAddingNewSubCategory] = useState(false)
   const [newSubCategoryName, setNewSubCategoryName] = useState('')
+  const [externalLink, setExternalLink] = useState('')
   const [formData, setFormData] = useState({
     title: '',
     content_type: 'document' as ContentType,
@@ -165,6 +166,7 @@ export default function NewPostPage() {
           content: formData.content,
           category: formData.category,
           sub_category: selectedSubCategory || null,
+          external_link: externalLink.trim() || null,
           author_id: user.id,
         })
         .select()
@@ -345,6 +347,23 @@ export default function NewPostPage() {
               )}
               <p className="mt-1 text-sm text-gray-500">
                 카테고리 내 세부 유형을 선택하세요 (선택사항).
+              </p>
+            </div>
+
+            {/* 외부 링크 (Flow 등) */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                외부 링크 (Flow 등)
+              </label>
+              <input
+                type="url"
+                value={externalLink}
+                onChange={(e) => setExternalLink(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                placeholder="https://flow.team/l/..."
+              />
+              <p className="mt-1 text-sm text-gray-500">
+                Flow 등 외부 협업 툴의 링크를 입력하면 매니저가 원본 자료를 볼 수 있습니다.
               </p>
             </div>
 

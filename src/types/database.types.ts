@@ -52,6 +52,7 @@ export interface Database {
           content: string;
           category: '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개' | '추가_서비스_규칙';
           sub_category: string | null;
+          external_link: string | null;
           created_at: string;
           updated_at: string;
           author_id: string;
@@ -64,6 +65,7 @@ export interface Database {
           content: string;
           category: '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개' | '추가_서비스_규칙';
           sub_category?: string | null;
+          external_link?: string | null;
           created_at?: string;
           updated_at?: string;
           author_id: string;
@@ -76,6 +78,7 @@ export interface Database {
           content?: string;
           category?: '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개' | '추가_서비스_규칙';
           sub_category?: string | null;
+          external_link?: string | null;
           created_at?: string;
           updated_at?: string;
           author_id?: string;

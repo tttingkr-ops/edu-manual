@@ -26,6 +26,22 @@ interface QuestionBuilderProps {
   uploadedImages?: string[]
 }
 
+// Parse question_image_url - handles both single URL (legacy) and JSON array
+function parseQuestionImages(val: string | null): string[] {
+  if (!val) return []
+  try {
+    const parsed = JSON.parse(val)
+    return Array.isArray(parsed) ? parsed : [val]
+  } catch {
+    return val ? [val] : []
+  }
+}
+
+function serializeQuestionImages(urls: string[]): string | null {
+  if (urls.length === 0) return null
+  return JSON.stringify(urls)
+}
+
 const emptyQuestion: QuestionData = {
   question_type: 'multiple_choice',
   question: '',
@@ -168,8 +184,27 @@ export default function QuestionBuilder({
     }
   }
 
-  const handleImageUpload = (index: number, url: string) => {
-    updateQuestion(index, { question_image_url: url || null })
+  const handleImageToggle = (index: number, url: string) => {
+    const current = parseQuestionImages(questions[index].question_image_url)
+    const newUrls = current.includes(url)
+      ? current.filter(u => u !== url)
+      : [...current, url]
+    updateQuestion(index, { question_image_url: serializeQuestionImages(newUrls) })
+  }
+
+  const handleImageAdd = (index: number, url: string) => {
+    if (!url) return
+    const current = parseQuestionImages(questions[index].question_image_url)
+    if (!current.includes(url)) {
+      const newUrls = [...current, url]
+      updateQuestion(index, { question_image_url: serializeQuestionImages(newUrls) })
+    }
+  }
+
+  const handleImageRemove = (index: number, url: string) => {
+    const current = parseQuestionImages(questions[index].question_image_url)
+    const newUrls = current.filter(u => u !== url)
+    updateQuestion(index, { question_image_url: serializeQuestionImages(newUrls) })
   }
 
   const updateOption = (questionIndex: number, optionIndex: number, value: string) => {
@@ -403,66 +438,89 @@ export default function QuestionBuilder({
                   {/* 문제 이미지 */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      문제 이미지 (선택)
+                      문제 이미지 (선택, 복수 선택 가능)
                     </label>
                     <p className="text-sm text-gray-500 mb-2">
                       카카오톡 대화 캡처 등 상황 이미지를 첨부하면 &quot;위 상황에서 올바른 응대 방법은?&quot; 형식의 문제를 만들 수 있습니다.
                     </p>
-                    {q.question_image_url ? (
-                      <div className="relative inline-block">
-                        <img
-                          src={q.question_image_url}
-                          alt="문제 이미지"
-                          className="max-h-40 rounded-lg border"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleImageUpload(index, '')}
-                          className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
+                    {/* 선택된 이미지 미리보기 */}
+                    {parseQuestionImages(q.question_image_url).length > 0 && (
+                      <div className="mb-3">
+                        <p className="text-sm font-medium text-gray-600 mb-2">
+                          선택된 이미지 ({parseQuestionImages(q.question_image_url).length}개)
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {parseQuestionImages(q.question_image_url).map((imgUrl, i) => (
+                            <div key={i} className="relative inline-block">
+                              <img
+                                src={imgUrl}
+                                alt={`문제 이미지 ${i + 1}`}
+                                className="h-24 w-auto rounded-lg border object-cover"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleImageRemove(index, imgUrl)}
+                                className="absolute -top-1 -right-1 p-0.5 bg-red-500 text-white rounded-full hover:bg-red-600"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {/* 교육 자료 이미지 선택 */}
-                        {uploadedImages.length > 0 && (
-                          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                            <p className="text-sm font-medium text-blue-800 mb-2">
-                              교육 자료 이미지에서 선택
-                            </p>
-                            <div className="flex flex-wrap gap-2">
-                              {uploadedImages.map((imgUrl, i) => (
+                    )}
+                    <div className="space-y-3">
+                      {/* 교육 자료 이미지 선택 (토글) */}
+                      {uploadedImages.length > 0 && (
+                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                          <p className="text-sm font-medium text-blue-800 mb-2">
+                            교육 자료 이미지에서 선택 (클릭하여 추가/제거)
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {uploadedImages.map((imgUrl, i) => {
+                              const isSelected = parseQuestionImages(q.question_image_url).includes(imgUrl)
+                              return (
                                 <button
                                   key={i}
                                   type="button"
-                                  onClick={() => handleImageUpload(index, imgUrl)}
-                                  className="relative group border-2 border-transparent hover:border-blue-500 rounded-lg overflow-hidden transition-all"
+                                  onClick={() => handleImageToggle(index, imgUrl)}
+                                  className={`relative group border-2 rounded-lg overflow-hidden transition-all ${
+                                    isSelected
+                                      ? 'border-blue-500 ring-2 ring-blue-300'
+                                      : 'border-transparent hover:border-blue-300'
+                                  }`}
                                 >
                                   <img
                                     src={imgUrl}
                                     alt={`교육 자료 이미지 ${i + 1}`}
                                     className="h-20 w-auto object-cover rounded"
                                   />
-                                  <div className="absolute inset-0 bg-blue-600 bg-opacity-0 group-hover:bg-opacity-20 flex items-center justify-center transition-all">
-                                    <span className="text-white opacity-0 group-hover:opacity-100 text-xs font-medium bg-blue-600 px-2 py-1 rounded">선택</span>
-                                  </div>
+                                  {isSelected && (
+                                    <div className="absolute top-1 right-1 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
+                                      <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                      </svg>
+                                    </div>
+                                  )}
+                                  {!isSelected && (
+                                    <div className="absolute inset-0 bg-blue-600 bg-opacity-0 group-hover:bg-opacity-10 transition-all" />
+                                  )}
                                 </button>
-                              ))}
-                            </div>
+                              )
+                            })}
                           </div>
-                        )}
-                        {/* 직접 업로드 */}
-                        <ImageUpload
-                          onUpload={(url) => handleImageUpload(index, url)}
-                          maxSizeMB={10}
-                          bucket="education-images"
-                          folder={`questions/${category}`}
-                        />
-                      </div>
-                    )}
+                        </div>
+                      )}
+                      {/* 직접 업로드 */}
+                      <ImageUpload
+                        onUpload={(url) => handleImageAdd(index, url)}
+                        maxSizeMB={10}
+                        bucket="education-images"
+                        folder={`questions/${category}`}
+                      />
+                    </div>
                   </div>
 
                   {/* 배점 */}

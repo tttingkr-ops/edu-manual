@@ -13,6 +13,7 @@ interface Post {
   content_type: 'video' | 'document'
   content: string
   category: string
+  external_link: string | null
   created_at: string
   updated_at: string
   author_id: string
@@ -147,6 +148,23 @@ export default function PostDetail({
               <span>수정일: {formatDate(post.updated_at)}</span>
             )}
           </div>
+
+          {/* 외부 링크 (Flow 등) */}
+          {post.external_link && (
+            <div className="mt-4">
+              <a
+                href={post.external_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+                원본 자료 보기 (Flow)
+              </a>
+            </div>
+          )}
         </div>
 
         {/* 콘텐츠 */}
