@@ -5,7 +5,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import QuestionBuilder, { QuestionData } from '@/components/QuestionBuilder'
@@ -30,6 +30,9 @@ interface SubCategory {
 
 export default function NewPostPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const urlCategory = searchParams.get('category') as Category | null
+  const urlSubCategory = searchParams.get('subcategory')
   const supabase = createClient()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -43,15 +46,17 @@ export default function NewPostPage() {
   const [questions, setQuestions] = useState<QuestionData[]>([])
   const [uploadedImages, setUploadedImages] = useState<string[]>([])
   const [subCategories, setSubCategories] = useState<SubCategory[]>([])
-  const [selectedSubCategory, setSelectedSubCategory] = useState<string>('')
+  const [selectedSubCategory, setSelectedSubCategory] = useState<string>(urlSubCategory || '')
   const [isAddingNewSubCategory, setIsAddingNewSubCategory] = useState(false)
   const [newSubCategoryName, setNewSubCategoryName] = useState('')
   const [externalLink, setExternalLink] = useState('')
+  const validCategories: Category[] = ['남자_매니저_대화', '여자_매니저_대화', '여자_매니저_소개', '추가_서비스_규칙']
+  const initialCategory = (urlCategory && validCategories.includes(urlCategory)) ? urlCategory : '남자_매니저_대화'
   const [formData, setFormData] = useState({
     title: '',
     content_type: 'document' as ContentType,
     content: '',
-    category: '남자_매니저_대화' as Category,
+    category: initialCategory,
   })
 
   // 서브카테고리, 그룹, 매니저 목록 조회
@@ -69,8 +74,13 @@ export default function NewPostPage() {
     fetchData()
   }, [])
 
-  // 카테고리 변경 시 서브카테고리 초기화
+  // 카테고리 변경 시 서브카테고리 초기화 (URL 파라미터로 설정된 초기값은 유지)
+  const [isInitialLoad, setIsInitialLoad] = useState(true)
   useEffect(() => {
+    if (isInitialLoad) {
+      setIsInitialLoad(false)
+      return
+    }
     setSelectedSubCategory('')
     setIsAddingNewSubCategory(false)
     setNewSubCategoryName('')
