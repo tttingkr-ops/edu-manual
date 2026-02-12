@@ -1,5 +1,6 @@
 // Created: 2026-01-27 18:00:00
 // Updated: 2026-01-29 - Supabase 실제 연동, 그룹 선택 UI 추가
+// Updated: 2026-02-10 - 동적 그룹 조회 및 개인 지정 타겟팅 추가
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -9,7 +10,6 @@ import { createClient } from '@/lib/supabase/client'
 
 type ContentType = 'video' | 'document'
 type Category = '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개' | '추가_서비스_규칙'
-type GroupName = '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개'
 
 interface Post {
   id: string
@@ -32,8 +32,9 @@ interface SubCategory {
 }
 
 interface EditPostContentProps {
-  post: Post
-  initialGroups: GroupName[]
+  post: Post & { targeting_type?: 'group' | 'individual' }
+  initialGroups: string[]
+  initialTargetUsers: string[]
 }
 
 const CATEGORIES: { value: Category; label: string }[] = [
@@ -43,18 +44,17 @@ const CATEGORIES: { value: Category; label: string }[] = [
   { value: '추가_서비스_규칙', label: '추가 서비스 규칙' },
 ]
 
-const GROUPS: { value: GroupName; label: string }[] = [
-  { value: '남자_매니저_대화', label: '남자 매니저 대화' },
-  { value: '여자_매니저_대화', label: '여자 매니저 대화' },
-  { value: '여자_매니저_소개', label: '여자 매니저 소개' },
-]
-
-export default function EditPostContent({ post, initialGroups }: EditPostContentProps) {
+export default function EditPostContent({ post, initialGroups, initialTargetUsers }: EditPostContentProps) {
   const router = useRouter()
   const supabase = createClient()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [selectedGroups, setSelectedGroups] = useState<GroupName[]>(initialGroups)
+  const [groups, setGroups] = useState<{id: string; name: string}[]>([])
+  const [targetingType, setTargetingType] = useState<'group' | 'individual'>(post.targeting_type || 'group')
+  const [selectedGroups, setSelectedGroups] = useState<string[]>(initialGroups)
+  const [managers, setManagers] = useState<{id: string; name: string; nickname: string | null}[]>([])
+  const [selectedManagers, setSelectedManagers] = useState<string[]>(initialTargetUsers)
+  const [managerSearch, setManagerSearch] = useState('')
   const [subCategories, setSubCategories] = useState<SubCategory[]>([])
   const [selectedSubCategory, setSelectedSubCategory] = useState<string>(post.sub_category || '')
   const [isAddingNewSubCategory, setIsAddingNewSubCategory] = useState(false)
@@ -67,17 +67,19 @@ export default function EditPostContent({ post, initialGroups }: EditPostContent
     category: post.category,
   })
 
-  // 서브카테고리 목록 조회
+  // 서브카테고리, 그룹, 매니저 목록 조회
   useEffect(() => {
-    const fetchSubCategories = async () => {
-      const { data } = await supabase
-        .from('sub_categories')
-        .select('*')
-        .order('sort_order')
-        .order('name')
-      setSubCategories(data || [])
+    const fetchData = async () => {
+      const [{ data: subCatData }, { data: groupsData }, { data: managersData }] = await Promise.all([
+        supabase.from('sub_categories').select('*').order('sort_order').order('name'),
+        supabase.from('groups').select('id, name').order('name'),
+        supabase.from('users').select('id, name, nickname').eq('role', 'manager').order('name'),
+      ])
+      setSubCategories(subCatData || [])
+      setGroups(groupsData || [])
+      setManagers(managersData || [])
     }
-    fetchSubCategories()
+    fetchData()
   }, [])
 
   // 현재 카테고리의 서브카테고리
@@ -115,13 +117,27 @@ export default function EditPostContent({ post, initialGroups }: EditPostContent
   }
 
   // 그룹 토글 핸들러
-  const handleGroupToggle = (group: GroupName, checked: boolean) => {
+  const handleGroupToggle = (groupName: string, checked: boolean) => {
     if (checked) {
-      setSelectedGroups([...selectedGroups, group])
+      setSelectedGroups([...selectedGroups, groupName])
     } else {
-      setSelectedGroups(selectedGroups.filter(g => g !== group))
+      setSelectedGroups(selectedGroups.filter(g => g !== groupName))
     }
   }
+
+  // 매니저 토글 핸들러
+  const handleManagerToggle = (managerId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedManagers([...selectedManagers, managerId])
+    } else {
+      setSelectedManagers(selectedManagers.filter(id => id !== managerId))
+    }
+  }
+
+  const filteredManagers = managers.filter(m => {
+    const search = managerSearch.toLowerCase()
+    return m.name.toLowerCase().includes(search) || (m.nickname && m.nickname.toLowerCase().includes(search))
+  })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -129,9 +145,12 @@ export default function EditPostContent({ post, initialGroups }: EditPostContent
     setError(null)
 
     try {
-      // 그룹 선택 검증
-      if (selectedGroups.length === 0) {
+      // 타겟팅 검증
+      if (targetingType === 'group' && selectedGroups.length === 0) {
         throw new Error('대상 그룹을 최소 1개 이상 선택해주세요.')
+      }
+      if (targetingType === 'individual' && selectedManagers.length === 0) {
+        throw new Error('대상 매니저를 최소 1명 이상 선택해주세요.')
       }
 
       // 게시물 업데이트
@@ -144,25 +163,32 @@ export default function EditPostContent({ post, initialGroups }: EditPostContent
           category: formData.category,
           sub_category: selectedSubCategory || null,
           external_link: externalLink.trim() || null,
+          targeting_type: targetingType,
         })
         .eq('id', post.id)
 
       if (updateError) throw updateError
 
-      // 기존 그룹 관계 삭제
+      // 기존 관계 삭제
       await supabase.from('post_groups').delete().eq('post_id', post.id)
+      await supabase.from('post_target_users').delete().eq('post_id', post.id)
 
-      // 새 그룹 관계 저장
-      const groupInserts = selectedGroups.map(groupName => ({
-        post_id: post.id,
-        group_name: groupName,
-      }))
-
-      const { error: groupError } = await supabase
-        .from('post_groups')
-        .insert(groupInserts)
-
-      if (groupError) throw groupError
+      // 새 관계 저장 (타겟팅 타입에 따라)
+      if (targetingType === 'group') {
+        const groupInserts = selectedGroups.map(groupName => ({
+          post_id: post.id,
+          group_name: groupName,
+        }))
+        const { error: groupError } = await supabase.from('post_groups').insert(groupInserts)
+        if (groupError) throw groupError
+      } else {
+        const targetInserts = selectedManagers.map(userId => ({
+          post_id: post.id,
+          user_id: userId,
+        }))
+        const { error: targetError } = await supabase.from('post_target_users').insert(targetInserts)
+        if (targetError) throw targetError
+      }
 
       router.push('/admin/posts')
     } catch (err: any) {
@@ -178,8 +204,9 @@ export default function EditPostContent({ post, initialGroups }: EditPostContent
     }
 
     try {
-      // 그룹 관계 먼저 삭제
+      // 관계 먼저 삭제
       await supabase.from('post_groups').delete().eq('post_id', post.id)
+      await supabase.from('post_target_users').delete().eq('post_id', post.id)
 
       // 게시물 삭제
       const { error: deleteError } = await supabase
@@ -353,30 +380,153 @@ export default function EditPostContent({ post, initialGroups }: EditPostContent
               </p>
             </div>
 
-            {/* 대상 그룹 */}
+            {/* 대상 지정 */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                대상 그룹 <span className="text-red-500">*</span>
+                대상 지정 <span className="text-red-500">*</span>
               </label>
-              <div className="space-y-2">
-                {GROUPS.map((group) => (
-                  <label
-                    key={group.value}
-                    className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
+
+              {/* 타겟팅 타입 토글 */}
+              <div className="flex gap-4 mb-4">
+                <label
+                  className={`flex-1 flex items-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-colors ${
+                    targetingType === 'group'
+                      ? 'border-primary-500 bg-primary-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="targeting_type"
+                    value="group"
+                    checked={targetingType === 'group'}
+                    onChange={() => setTargetingType('group')}
+                    className="sr-only"
+                  />
+                  <div
+                    className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                      targetingType === 'group'
+                        ? 'bg-primary-500 text-white'
+                        : 'bg-gray-100 text-gray-500'
+                    }`}
                   >
-                    <input
-                      type="checkbox"
-                      checked={selectedGroups.includes(group.value)}
-                      onChange={(e) => handleGroupToggle(group.value, e.target.checked)}
-                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <span className="text-gray-700">{group.label}</span>
-                  </label>
-                ))}
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900">그룹 지정</p>
+                    <p className="text-sm text-gray-500">그룹 단위로 대상 지정</p>
+                  </div>
+                </label>
+
+                <label
+                  className={`flex-1 flex items-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-colors ${
+                    targetingType === 'individual'
+                      ? 'border-primary-500 bg-primary-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="targeting_type"
+                    value="individual"
+                    checked={targetingType === 'individual'}
+                    onChange={() => setTargetingType('individual')}
+                    className="sr-only"
+                  />
+                  <div
+                    className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                      targetingType === 'individual'
+                        ? 'bg-primary-500 text-white'
+                        : 'bg-gray-100 text-gray-500'
+                    }`}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900">개인 지정</p>
+                    <p className="text-sm text-gray-500">매니저 개별 지정</p>
+                  </div>
+                </label>
               </div>
-              <p className="mt-2 text-sm text-gray-500">
-                이 교육 자료를 볼 수 있는 그룹을 선택하세요.
-              </p>
+
+              {/* 그룹 선택 */}
+              {targetingType === 'group' && (
+                <div className="space-y-2">
+                  {groups.length === 0 ? (
+                    <p className="text-sm text-gray-400 p-3">등록된 그룹이 없습니다.</p>
+                  ) : (
+                    groups.map((group) => (
+                      <label
+                        key={group.id}
+                        className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedGroups.includes(group.name)}
+                          onChange={(e) => handleGroupToggle(group.name, e.target.checked)}
+                          className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                        />
+                        <span className="text-gray-700">{group.name}</span>
+                      </label>
+                    ))
+                  )}
+                  <p className="mt-2 text-sm text-gray-500">
+                    이 교육 자료를 볼 수 있는 그룹을 선택하세요.
+                  </p>
+                </div>
+              )}
+
+              {/* 개인 선택 */}
+              {targetingType === 'individual' && (
+                <div>
+                  <input
+                    type="text"
+                    value={managerSearch}
+                    onChange={(e) => setManagerSearch(e.target.value)}
+                    placeholder="매니저 이름 또는 닉네임으로 검색..."
+                    className="w-full px-4 py-2 mb-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  />
+                  <div className="max-h-64 overflow-y-auto space-y-2 border border-gray-200 rounded-lg p-2">
+                    {filteredManagers.length === 0 ? (
+                      <p className="text-sm text-gray-400 p-3 text-center">
+                        {managerSearch ? '검색 결과가 없습니다.' : '등록된 매니저가 없습니다.'}
+                      </p>
+                    ) : (
+                      filteredManagers.map((manager) => (
+                        <label
+                          key={manager.id}
+                          className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedManagers.includes(manager.id)}
+                            onChange={(e) => handleManagerToggle(manager.id, e.target.checked)}
+                            className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          />
+                          <span className="text-gray-700">
+                            {manager.name}
+                            {manager.nickname && (
+                              <span className="text-gray-400 ml-1">({manager.nickname})</span>
+                            )}
+                          </span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                  {selectedManagers.length > 0 && (
+                    <p className="mt-2 text-sm text-primary-600">
+                      {selectedManagers.length}명 선택됨
+                    </p>
+                  )}
+                  <p className="mt-1 text-sm text-gray-500">
+                    이 교육 자료를 볼 수 있는 매니저를 선택하세요.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* 콘텐츠 타입 */}

@@ -11,5 +11,22 @@ export default async function UsersPage() {
     .select('*')
     .order('created_at', { ascending: false })
 
-  return <UsersContent users={users || []} />
+  // 그룹 목록 조회
+  const { data: groups } = await supabase
+    .from('groups')
+    .select('*')
+    .order('created_at', { ascending: true })
+
+  // 사용자-그룹 매핑 조회
+  const { data: userGroups } = await supabase
+    .from('user_groups')
+    .select('*')
+
+  return (
+    <UsersContent
+      users={users || []}
+      groups={groups || []}
+      userGroups={userGroups || []}
+    />
+  )
 }

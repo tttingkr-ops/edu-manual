@@ -28,6 +28,7 @@ export async function createUserWithAuth(
     username: string
     name: string
     role: 'admin' | 'manager'
+    nickname?: string
   }
 ): Promise<CreateUserResult> {
   const supabase = createAdminClient()
@@ -60,6 +61,7 @@ export async function createUserWithAuth(
       username: userData.username,
       name: userData.name,
       role: userData.role,
+      nickname: userData.nickname || null,
     })
 
     if (dbError) {

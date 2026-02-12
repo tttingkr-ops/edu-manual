@@ -19,6 +19,7 @@ export interface Database {
           username: string;
           role: 'admin' | 'manager';
           name: string;
+          nickname: string | null;
           created_at: string;
         };
         Insert: {
@@ -26,6 +27,7 @@ export interface Database {
           username: string;
           role: 'admin' | 'manager';
           name: string;
+          nickname?: string | null;
           created_at?: string;
         };
         Update: {
@@ -33,6 +35,7 @@ export interface Database {
           username?: string;
           role?: 'admin' | 'manager';
           name?: string;
+          nickname?: string | null;
           created_at?: string;
         };
         Relationships: [
@@ -51,6 +54,7 @@ export interface Database {
           content_type: 'video' | 'document';
           content: string;
           category: '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개' | '추가_서비스_규칙';
+          targeting_type: 'group' | 'individual';
           created_at: string;
           updated_at: string;
           author_id: string;
@@ -61,6 +65,7 @@ export interface Database {
           content_type: 'video' | 'document';
           content: string;
           category: '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개' | '추가_서비스_규칙';
+          targeting_type?: 'group' | 'individual';
           created_at?: string;
           updated_at?: string;
           author_id: string;
@@ -71,6 +76,7 @@ export interface Database {
           content_type?: 'video' | 'document';
           content?: string;
           category?: '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개' | '추가_서비스_규칙';
+          targeting_type?: 'group' | 'individual';
           created_at?: string;
           updated_at?: string;
           author_id?: string;
@@ -88,17 +94,17 @@ export interface Database {
         Row: {
           id: string;
           post_id: string;
-          group_name: '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개';
+          group_name: string;
         };
         Insert: {
           id?: string;
           post_id: string;
-          group_name: '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개';
+          group_name: string;
         };
         Update: {
           id?: string;
           post_id?: string;
-          group_name?: '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개';
+          group_name?: string;
         };
         Relationships: [
           {
@@ -217,6 +223,237 @@ export interface Database {
         Relationships: [
           {
             foreignKeyName: 'test_results_user_id_fkey';
+            columns: ['user_id'];
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+      groups: {
+        Row: {
+          id: string;
+          name: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      user_groups: {
+        Row: {
+          id: string;
+          user_id: string;
+          group_id: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          group_id: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          group_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'user_groups_user_id_fkey';
+            columns: ['user_id'];
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'user_groups_group_id_fkey';
+            columns: ['group_id'];
+            referencedRelation: 'groups';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+      post_target_users: {
+        Row: {
+          id: string;
+          post_id: string;
+          user_id: string;
+        };
+        Insert: {
+          id?: string;
+          post_id: string;
+          user_id: string;
+        };
+        Update: {
+          id?: string;
+          post_id?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'post_target_users_post_id_fkey';
+            columns: ['post_id'];
+            referencedRelation: 'educational_posts';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'post_target_users_user_id_fkey';
+            columns: ['user_id'];
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+      meeting_posts: {
+        Row: {
+          id: string;
+          title: string;
+          content: string | null;
+          post_type: 'free' | 'poll';
+          is_anonymous: boolean;
+          allow_multiple: boolean;
+          author_id: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          title: string;
+          content?: string | null;
+          post_type?: 'free' | 'poll';
+          is_anonymous?: boolean;
+          allow_multiple?: boolean;
+          author_id: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          title?: string;
+          content?: string | null;
+          post_type?: 'free' | 'poll';
+          is_anonymous?: boolean;
+          allow_multiple?: boolean;
+          author_id?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'meeting_posts_author_id_fkey';
+            columns: ['author_id'];
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+      meeting_comments: {
+        Row: {
+          id: string;
+          post_id: string;
+          author_id: string;
+          content: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          post_id: string;
+          author_id: string;
+          content: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          post_id?: string;
+          author_id?: string;
+          content?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'meeting_comments_post_id_fkey';
+            columns: ['post_id'];
+            referencedRelation: 'meeting_posts';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'meeting_comments_author_id_fkey';
+            columns: ['author_id'];
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+      meeting_poll_options: {
+        Row: {
+          id: string;
+          post_id: string;
+          option_text: string;
+          sort_order: number;
+        };
+        Insert: {
+          id?: string;
+          post_id: string;
+          option_text: string;
+          sort_order?: number;
+        };
+        Update: {
+          id?: string;
+          post_id?: string;
+          option_text?: string;
+          sort_order?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'meeting_poll_options_post_id_fkey';
+            columns: ['post_id'];
+            referencedRelation: 'meeting_posts';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+      meeting_votes: {
+        Row: {
+          id: string;
+          post_id: string;
+          option_id: string;
+          user_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          post_id: string;
+          option_id: string;
+          user_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          post_id?: string;
+          option_id?: string;
+          user_id?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'meeting_votes_post_id_fkey';
+            columns: ['post_id'];
+            referencedRelation: 'meeting_posts';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'meeting_votes_option_id_fkey';
+            columns: ['option_id'];
+            referencedRelation: 'meeting_poll_options';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'meeting_votes_user_id_fkey';
             columns: ['user_id'];
             referencedRelation: 'users';
             referencedColumns: ['id'];

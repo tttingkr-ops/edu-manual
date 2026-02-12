@@ -45,3 +45,14 @@ next-env.d.ts
 
 # Claude
 .claude/
+
+# oh-my-claudecode
+.omc/
+
+# Playwright MCP
+.playwright-mcp/
+
+# Temp files
+_ul
+nul
+test-dnd-initial.png
