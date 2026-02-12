@@ -451,6 +451,9 @@ export interface Database {
           is_anonymous: boolean;
           allow_multiple: boolean;
           author_id: string;
+          status: 'pending' | 'completed';
+          priority: 'urgent' | 'high' | 'normal' | 'low' | null;
+          deadline: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -462,6 +465,9 @@ export interface Database {
           is_anonymous?: boolean;
           allow_multiple?: boolean;
           author_id: string;
+          status?: 'pending' | 'completed';
+          priority?: 'urgent' | 'high' | 'normal' | 'low' | null;
+          deadline?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -473,6 +479,9 @@ export interface Database {
           is_anonymous?: boolean;
           allow_multiple?: boolean;
           author_id?: string;
+          status?: 'pending' | 'completed';
+          priority?: 'urgent' | 'high' | 'normal' | 'low' | null;
+          deadline?: string | null;
           created_at?: string;
           updated_at?: string;
         };

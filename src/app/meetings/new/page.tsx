@@ -21,6 +21,11 @@ export default function NewMeetingPage() {
   const [postType, setPostType] = useState<PostType>('free')
   const [content, setContent] = useState('')
 
+  // Priority & deadline
+  type Priority = 'urgent' | 'high' | 'normal' | 'low' | ''
+  const [priority, setPriority] = useState<Priority>('')
+  const [deadline, setDeadline] = useState<string>('')
+
   // Poll-specific state
   const [options, setOptions] = useState<string[]>(['', ''])
   const [allowMultiple, setAllowMultiple] = useState(false)
@@ -83,14 +88,20 @@ export default function NewMeetingPage() {
     setError(null)
 
     try {
+      const commonFields = {
+        title: title.trim(),
+        author_id: userId,
+        priority: priority || null,
+        deadline: deadline || null,
+      }
+
       if (postType === 'free') {
         const { error: insertError } = await supabase
           .from('meeting_posts')
           .insert({
-            title: title.trim(),
+            ...commonFields,
             content: content,
             post_type: 'free',
-            author_id: userId,
           })
 
         if (insertError) throw insertError
@@ -99,12 +110,11 @@ export default function NewMeetingPage() {
         const { data, error: insertError } = await supabase
           .from('meeting_posts')
           .insert({
-            title: title.trim(),
+            ...commonFields,
             content: null,
             post_type: 'poll',
             is_anonymous: isAnonymous,
             allow_multiple: allowMultiple,
-            author_id: userId,
           })
           .select()
           .single()
@@ -168,6 +178,63 @@ export default function NewMeetingPage() {
             placeholder="안건 제목을 입력하세요"
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
           />
+        </div>
+
+        {/* 긴급도 & 데드라인 */}
+        <div className="mb-6 grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              긴급도 <span className="text-gray-400 text-xs font-normal">(선택사항)</span>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { value: '', label: '없음', color: 'bg-gray-100 text-gray-600 border-gray-200' },
+                { value: 'urgent', label: '긴급', color: 'bg-red-100 text-red-700 border-red-300' },
+                { value: 'high', label: '높음', color: 'bg-orange-100 text-orange-700 border-orange-300' },
+                { value: 'normal', label: '보통', color: 'bg-blue-100 text-blue-700 border-blue-300' },
+                { value: 'low', label: '낮음', color: 'bg-gray-100 text-gray-600 border-gray-300' },
+              ].map((p) => (
+                <button
+                  key={p.value}
+                  type="button"
+                  onClick={() => setPriority(p.value as Priority)}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-lg border-2 transition-all ${
+                    priority === p.value
+                      ? `${p.color} ring-2 ring-offset-1 ring-current`
+                      : 'bg-white text-gray-400 border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              데드라인 <span className="text-gray-400 text-xs font-normal">(선택사항)</span>
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={deadline}
+                onChange={(e) => setDeadline(e.target.value)}
+                min={new Date().toISOString().split('T')[0]}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              />
+              {deadline && (
+                <button
+                  type="button"
+                  onClick={() => setDeadline('')}
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+                  title="데드라인 제거"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* 게시글 유형 선택 */}

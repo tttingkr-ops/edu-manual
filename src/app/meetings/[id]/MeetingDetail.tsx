@@ -17,7 +17,17 @@ interface MeetingPost {
   allow_multiple: boolean
   author_id: string
   author_name: string
+  status: 'pending' | 'completed'
+  priority: 'urgent' | 'high' | 'normal' | 'low' | null
+  deadline: string | null
   created_at: string
+}
+
+const PRIORITY_CONFIG: Record<string, { label: string; color: string; bgColor: string }> = {
+  urgent: { label: '긴급', color: 'text-red-700', bgColor: 'bg-red-100 border-red-200' },
+  high: { label: '높음', color: 'text-orange-700', bgColor: 'bg-orange-100 border-orange-200' },
+  normal: { label: '보통', color: 'text-blue-700', bgColor: 'bg-blue-100 border-blue-200' },
+  low: { label: '낮음', color: 'text-gray-600', bgColor: 'bg-gray-100 border-gray-200' },
 }
 
 interface Comment {
@@ -57,6 +67,10 @@ export default function MeetingDetail({
   const router = useRouter()
   const supabase = createClient()
 
+  // Status state
+  const [localStatus, setLocalStatus] = useState<'pending' | 'completed'>(post.status)
+  const [isTogglingStatus, setIsTogglingStatus] = useState(false)
+
   // Comment state
   const [newComment, setNewComment] = useState('')
   const [isSubmittingComment, setIsSubmittingComment] = useState(false)
@@ -71,6 +85,53 @@ export default function MeetingDetail({
   const totalVotes = localOptions.reduce((sum, opt) => sum + opt.vote_count, 0)
 
   const canDelete = post.author_id === currentUserId || userRole === 'admin'
+
+  // 데드라인 헬퍼
+  const getDaysUntilDeadline = (deadline: string | null): number | null => {
+    if (!deadline) return null
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const deadlineDate = new Date(deadline)
+    deadlineDate.setHours(0, 0, 0, 0)
+    return Math.ceil((deadlineDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+  }
+
+  const getDeadlineStyle = (deadline: string | null) => {
+    if (!deadline || localStatus === 'completed') return { color: 'text-gray-400', bold: false }
+    const days = getDaysUntilDeadline(deadline)!
+    if (days <= 0) return { color: 'text-red-600', bold: true }
+    if (days <= 3) return { color: 'text-orange-600', bold: true }
+    return { color: 'text-gray-500', bold: false }
+  }
+
+  const getDeadlineText = (deadline: string | null) => {
+    if (!deadline) return ''
+    const days = getDaysUntilDeadline(deadline)!
+    const dateStr = new Date(deadline).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })
+    if (days < 0) return `${dateStr} (${Math.abs(days)}일 지남)`
+    if (days === 0) return `${dateStr} (오늘 마감)`
+    if (days === 1) return `${dateStr} (내일 마감)`
+    return `${dateStr} (${days}일 남음)`
+  }
+
+  // 상태 토글
+  const handleToggleStatus = async () => {
+    setIsTogglingStatus(true)
+    const newStatus = localStatus === 'pending' ? 'completed' : 'pending'
+    try {
+      const { error } = await supabase
+        .from('meeting_posts')
+        .update({ status: newStatus })
+        .eq('id', post.id)
+      if (error) throw error
+      setLocalStatus(newStatus)
+    } catch (err: any) {
+      console.error('Status toggle error:', err)
+      alert('상태 변경 중 오류가 발생했습니다.')
+    } finally {
+      setIsTogglingStatus(false)
+    }
+  }
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
@@ -251,12 +312,32 @@ export default function MeetingDetail({
       </div>
 
       {/* 게시글 카드 */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6">
+      <div className={`bg-white rounded-xl shadow-sm border border-gray-200 mb-6 ${localStatus === 'completed' ? 'opacity-70' : ''}`}>
         {/* 헤더 */}
         <div className="p-6 border-b border-gray-100">
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                {/* 완료 상태 배지 */}
+                {localStatus === 'completed' && (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                    논의 완료
+                  </span>
+                )}
+                {/* 긴급도 배지 */}
+                {post.priority && PRIORITY_CONFIG[post.priority] && (
+                  <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full border ${PRIORITY_CONFIG[post.priority].bgColor} ${PRIORITY_CONFIG[post.priority].color}`}>
+                    {post.priority === 'urgent' && (
+                      <svg className="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                      </svg>
+                    )}
+                    {PRIORITY_CONFIG[post.priority].label}
+                  </span>
+                )}
                 {post.post_type === 'poll' ? (
                   <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-800">
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -283,24 +364,61 @@ export default function MeetingDetail({
                   </span>
                 )}
               </div>
-              <h1 className="text-xl font-bold text-gray-900 mb-2">{post.title}</h1>
-              <div className="flex items-center gap-3 text-sm text-gray-500">
+              <h1 className={`text-xl font-bold mb-2 ${localStatus === 'completed' ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{post.title}</h1>
+              <div className="flex items-center gap-3 text-sm text-gray-500 flex-wrap">
                 <span className="font-medium text-gray-700">{post.author_name}</span>
                 <span className="text-gray-300">|</span>
                 <span>{formatDate(post.created_at)}</span>
+                {/* 데드라인 표시 */}
+                {post.deadline && (() => {
+                  const style = getDeadlineStyle(post.deadline)
+                  return (
+                    <>
+                      <span className="text-gray-300">|</span>
+                      <span className={`flex items-center gap-1 ${style.color} ${style.bold ? 'font-semibold' : ''}`}>
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        {getDeadlineText(post.deadline)}
+                      </span>
+                    </>
+                  )
+                })()}
               </div>
             </div>
-            {canDelete && (
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {/* 상태 토글 버튼 */}
               <button
-                onClick={handleDeletePost}
-                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
-                title="삭제"
+                onClick={handleToggleStatus}
+                disabled={isTogglingStatus}
+                className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg border-2 transition-all disabled:opacity-50 ${
+                  localStatus === 'completed'
+                    ? 'bg-green-50 border-green-300 text-green-700 hover:bg-green-100'
+                    : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-primary-400'
+                }`}
+                title={localStatus === 'completed' ? '미완으로 변경' : '완료로 변경'}
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
+                {localStatus === 'completed' ? (
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                ) : (
+                  <div className="w-4 h-4 rounded border-2 border-gray-400" />
+                )}
+                {localStatus === 'completed' ? '완료' : '미완'}
               </button>
-            )}
+              {canDelete && (
+                <button
+                  onClick={handleDeletePost}
+                  className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  title="삭제"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
