@@ -43,6 +43,23 @@ export default async function TestListPage() {
     data: { user },
   } = await supabase.auth.getUser()
 
+  // 사용자 그룹 조회
+  const { data: userGroups } = await supabase
+    .from('user_groups')
+    .select('group_id, groups(name)')
+    .eq('user_id', user?.id || '')
+
+  // 허용 카테고리 계산 (그룹명의 공백을 언더스코어로 변환)
+  const userGroupNames = (userGroups || []).map((ug: any) => ug.groups?.name).filter(Boolean)
+  const allowedCategories = userGroupNames.length > 0
+    ? userGroupNames.map((name: string) => name.replace(/ /g, '_'))
+    : null // null = 모든 카테고리
+
+  // 허용된 카테고리만 필터
+  const filteredCategories = allowedCategories
+    ? CATEGORIES.filter(c => allowedCategories.includes(c.id))
+    : CATEGORIES
+
   // 모든 테스트 문제 조회하여 카테고리별 개수 계산
   const { data: allQuestions } = await supabase
     .from('test_questions')
@@ -53,7 +70,9 @@ export default async function TestListPage() {
     countByCategory[q.category] = (countByCategory[q.category] || 0) + 1
   })
 
-  const totalQuestions = allQuestions?.length || 0
+  // 전체 문제 수: 허용 카테고리의 문제만 카운트
+  const allowedCategoryIds = filteredCategories.map(c => c.id)
+  const totalQuestions = allQuestions?.filter((q: any) => allowedCategoryIds.includes(q.category)).length || 0
 
   // 사용자의 최근 테스트 결과 조회
   const { data: recentResults } = await supabase
@@ -101,7 +120,7 @@ export default async function TestListPage() {
       <div className="mb-8">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">카테고리별 테스트</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {CATEGORIES.map((category) => {
+          {filteredCategories.map((category) => {
             const questionCount = countByCategory[category.id] || 0
             const hasQuestions = questionCount > 0
 

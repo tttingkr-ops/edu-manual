@@ -60,6 +60,7 @@ export default function UsersContent({
     name: '',
     nickname: '',
     role: 'manager' as 'admin' | 'manager',
+    groupIds: [] as string[],
   })
   const [newPassword, setNewPassword] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
@@ -90,7 +91,7 @@ export default function UsersContent({
   // 모달 열기 (추가)
   const openAddModal = () => {
     setEditingUser(null)
-    setFormData({ password: '', username: '', name: '', nickname: '', role: 'manager' })
+    setFormData({ password: '', username: '', name: '', nickname: '', role: 'manager', groupIds: [] })
     setError(null)
     setShowModal(true)
   }
@@ -98,12 +99,16 @@ export default function UsersContent({
   // 모달 열기 (수정)
   const openEditModal = (user: User) => {
     setEditingUser(user)
+    const currentGroupIds = userGroups
+      .filter((ug) => ug.user_id === user.id)
+      .map((ug) => ug.group_id)
     setFormData({
       password: '',
       username: user.username,
       name: user.name,
       nickname: user.nickname || '',
       role: user.role,
+      groupIds: currentGroupIds,
     })
     setError(null)
     setShowModal(true)
@@ -113,7 +118,7 @@ export default function UsersContent({
   const closeModal = () => {
     setShowModal(false)
     setEditingUser(null)
-    setFormData({ password: '', username: '', name: '', nickname: '', role: 'manager' })
+    setFormData({ password: '', username: '', name: '', nickname: '', role: 'manager', groupIds: [] })
     setError(null)
   }
 
@@ -197,6 +202,12 @@ export default function UsersContent({
           throw new Error(result.error)
         }
 
+        // 그룹도 함께 저장
+        const groupResult = await updateUserGroupsAction(editingUser.id, formData.groupIds)
+        if (!groupResult.success) {
+          throw new Error(groupResult.error)
+        }
+
         setUsers(users.map((u) =>
           u.id === editingUser.id
             ? {
@@ -208,6 +219,14 @@ export default function UsersContent({
               }
             : u
         ))
+
+        // 그룹 상태 업데이트
+        const newUserGroups = userGroups.filter((ug) => ug.user_id !== editingUser.id)
+        const additions = formData.groupIds.map((gid) => ({
+          user_id: editingUser.id,
+          group_id: gid,
+        }))
+        setUserGroups([...newUserGroups, ...additions])
       } else {
         // 추가 - Auth와 함께 사용자 생성
         if (!formData.username || !formData.password) {
@@ -237,6 +256,11 @@ export default function UsersContent({
           throw new Error(result.error)
         }
 
+        // 새 사용자의 그룹 저장
+        if (formData.groupIds.length > 0) {
+          await updateUserGroupsAction(result.userId!, formData.groupIds)
+        }
+
         // 새 사용자 추가
         setUsers([{
           id: result.userId!,
@@ -246,6 +270,15 @@ export default function UsersContent({
           role: formData.role,
           created_at: new Date().toISOString(),
         }, ...users])
+
+        // 그룹 상태 업데이트
+        if (formData.groupIds.length > 0) {
+          const additions = formData.groupIds.map((gid) => ({
+            user_id: result.userId!,
+            group_id: gid,
+          }))
+          setUserGroups([...userGroups, ...additions])
+        }
       }
 
       closeModal()
@@ -870,6 +903,41 @@ export default function UsersContent({
                   <option value="admin">관리자</option>
                 </select>
               </div>
+
+              {/* 그룹 선택 */}
+              {groups.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    그룹 (교육 카테고리)
+                  </label>
+                  <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-3">
+                    {groups.map((group) => (
+                      <label
+                        key={group.id}
+                        className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1 rounded"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={formData.groupIds.includes(group.id)}
+                          onChange={() => {
+                            setFormData((prev) => ({
+                              ...prev,
+                              groupIds: prev.groupIds.includes(group.id)
+                                ? prev.groupIds.filter((id) => id !== group.id)
+                                : [...prev.groupIds, group.id],
+                            }))
+                          }}
+                          className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                        />
+                        <span className="text-sm text-gray-700">{group.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500">
+                    그룹 미지정 시 모든 교육 카테고리에 접근 가능
+                  </p>
+                </div>
+              )}
 
               <div className="flex gap-3 pt-4">
                 <button

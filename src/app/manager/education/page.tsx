@@ -92,5 +92,11 @@ export default async function EducationPage() {
     isRead: readStatusMap.get(post.id) || false,
   }))
 
-  return <EducationContent posts={postsWithReadStatus} subCategories={subCategories || []} />
+  // 사용자 그룹 → 허용 카테고리 계산 (그룹명의 공백을 언더스코어로 변환)
+  const userGroupNamesList = Array.from(userGroupNames)
+  const allowedCategories = userGroupNamesList.length > 0
+    ? userGroupNamesList.map(name => name.replace(/ /g, '_'))
+    : null // null = 모든 카테고리 접근 가능
+
+  return <EducationContent posts={postsWithReadStatus} subCategories={subCategories || []} allowedCategories={allowedCategories} />
 }

@@ -29,17 +29,23 @@ interface SubCategory {
 interface EducationContentProps {
   posts: Post[]
   subCategories: SubCategory[]
+  allowedCategories: string[] | null // null = 모든 카테고리 접근 가능
 }
 
-const CATEGORIES = [
+const ALL_CATEGORIES = [
   { id: '남자_매니저_대화', label: '남자 매니저 대화' },
   { id: '여자_매니저_대화', label: '여자 매니저 대화' },
   { id: '여자_매니저_소개', label: '여자 매니저 소개' },
   { id: '추가_서비스_규칙', label: '추가 서비스 규칙' },
 ]
 
-export default function EducationContent({ posts, subCategories }: EducationContentProps) {
-  const [activeTab, setActiveTab] = useState(CATEGORIES[0].id)
+export default function EducationContent({ posts, subCategories, allowedCategories }: EducationContentProps) {
+  // 허용된 카테고리만 필터링
+  const CATEGORIES = allowedCategories
+    ? ALL_CATEGORIES.filter(c => allowedCategories.includes(c.id))
+    : ALL_CATEGORIES
+
+  const [activeTab, setActiveTab] = useState(CATEGORIES[0]?.id || '')
   const [activeSubCategory, setActiveSubCategory] = useState<string | null>(null)
 
   // 현재 탭의 서브카테고리

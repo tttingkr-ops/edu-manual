@@ -20,6 +20,22 @@ export default async function TestPage({ params }: PageProps) {
     redirect('/login')
   }
 
+  // 사용자 그룹 조회 → 허용 카테고리 계산
+  const { data: userGroups } = await supabase
+    .from('user_groups')
+    .select('group_id, groups(name)')
+    .eq('user_id', user.id)
+
+  const userGroupNames = (userGroups || []).map((ug: any) => ug.groups?.name).filter(Boolean)
+  const allowedCategories = userGroupNames.length > 0
+    ? userGroupNames.map((name: string) => name.replace(/ /g, '_'))
+    : null // null = 모든 카테고리
+
+  // 카테고리 접근 권한 검증 ("전체"는 항상 허용)
+  if (decodedCategory !== '전체' && allowedCategories && !allowedCategories.includes(decodedCategory)) {
+    redirect('/manager/test')
+  }
+
   // 문제 조회
   interface Question {
     id: string
@@ -39,10 +55,12 @@ export default async function TestPage({ params }: PageProps) {
   let questions: Question[] = []
 
   if (decodedCategory === '전체') {
-    // 전체 테스트: 모든 카테고리에서 랜덤으로 20문제
-    const { data } = await supabase
-      .from('test_questions')
-      .select('*')
+    // 전체 테스트: 허용 카테고리에서 랜덤으로 20문제
+    let query = supabase.from('test_questions').select('*')
+    if (allowedCategories) {
+      query = query.in('category', allowedCategories)
+    }
+    const { data } = await query
 
     if (data) {
       const shuffled = [...data].sort(() => Math.random() - 0.5)
