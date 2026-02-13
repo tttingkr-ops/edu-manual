@@ -67,7 +67,6 @@ export default async function ReviewsPage() {
       ),
       users!subjective_answers_user_id_fkey (
         id,
-        name,
         username
       )
     `)

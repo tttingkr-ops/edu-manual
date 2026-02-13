@@ -5,7 +5,6 @@ import { createClient } from '@/lib/supabase/server'
 
 interface ManagerStats {
   id: string
-  name: string
   username: string
   averageScore: number | null
   totalTests: number
@@ -27,12 +26,12 @@ export default async function AdminDashboard() {
     supabase.from('educational_posts').select('*', { count: 'exact', head: true }),
     supabase
       .from('test_results')
-      .select('*, users(name)')
+      .select('*, users(username)')
       .order('test_date', { ascending: false })
       .limit(5),
     supabase
       .from('users')
-      .select('id, name, username')
+      .select('id, username')
       .eq('role', 'manager'),
     supabase
       .from('user_reading_progress')
@@ -50,7 +49,6 @@ export default async function AdminDashboard() {
 
       return {
         id: manager.id,
-        name: manager.name,
         username: manager.username,
         averageScore: scoreData?.[0]?.average_score ?? null,
         totalTests: scoreData?.[0]?.total_tests ?? 0,
@@ -180,11 +178,10 @@ export default async function AdminDashboard() {
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center text-gray-600 font-medium text-sm">
-                          {manager.name.charAt(0)}
+                          {manager.username.charAt(0)}
                         </div>
                         <div>
-                          <p className="font-medium text-gray-900">{manager.name}</p>
-                          <p className="text-sm text-gray-500">{manager.username}</p>
+                          <p className="font-medium text-gray-900">{manager.username}</p>
                         </div>
                       </div>
                     </td>
@@ -312,7 +309,7 @@ export default async function AdminDashboard() {
                 >
                   <div>
                     <p className="font-medium text-gray-900">
-                      {test.users?.name || '알 수 없음'}
+                      {test.users?.username || '알 수 없음'}
                     </p>
                     <p className="text-sm text-gray-500">{test.category}</p>
                   </div>

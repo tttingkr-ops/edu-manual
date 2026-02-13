@@ -13,7 +13,7 @@ type Category = '남자_매니저_대화' | '여자_매니저_대화' | '여자_
 
 interface UnreadManager {
   id: string
-  name: string
+  username: string
 }
 
 interface Post {
@@ -587,9 +587,9 @@ export default function PostsContent({ posts: initialPosts }: PostsContentProps)
                 {selectedUnreadManagers.map((manager) => (
                   <li key={manager.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
                     <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center text-gray-600 font-medium text-sm">
-                      {manager.name.charAt(0)}
+                      {manager.username.charAt(0)}
                     </div>
-                    <span className="text-gray-900">{manager.name}</span>
+                    <span className="text-gray-900">{manager.username}</span>
                   </li>
                 ))}
               </ul>

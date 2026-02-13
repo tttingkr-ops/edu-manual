@@ -57,7 +57,6 @@ export default function UsersContent({
   const [formData, setFormData] = useState({
     password: '',
     username: '',
-    name: '',
     nickname: '',
     role: 'manager' as 'admin' | 'manager',
     groupIds: [] as string[],
@@ -81,7 +80,6 @@ export default function UsersContent({
   // 필터링된 사용자 목록
   const filteredUsers = users.filter((user) => {
     const matchesSearch =
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (user.nickname && user.nickname.toLowerCase().includes(searchTerm.toLowerCase()))
     const matchesRole = filterRole === 'all' || user.role === filterRole
@@ -91,7 +89,7 @@ export default function UsersContent({
   // 모달 열기 (추가)
   const openAddModal = () => {
     setEditingUser(null)
-    setFormData({ password: '', username: '', name: '', nickname: '', role: 'manager', groupIds: [] })
+    setFormData({ password: '', username: '', nickname: '', role: 'manager', groupIds: [] })
     setError(null)
     setShowModal(true)
   }
@@ -105,7 +103,6 @@ export default function UsersContent({
     setFormData({
       password: '',
       username: user.username,
-      name: user.name,
       nickname: user.nickname || '',
       role: user.role,
       groupIds: currentGroupIds,
@@ -118,7 +115,7 @@ export default function UsersContent({
   const closeModal = () => {
     setShowModal(false)
     setEditingUser(null)
-    setFormData({ password: '', username: '', name: '', nickname: '', role: 'manager', groupIds: [] })
+    setFormData({ password: '', username: '', nickname: '', role: 'manager', groupIds: [] })
     setError(null)
   }
 
@@ -193,7 +190,7 @@ export default function UsersContent({
         const result = await updateUserAction({
           userId: editingUser.id,
           username: formData.username,
-          name: formData.name,
+          name: formData.username,
           nickname: formData.nickname || undefined,
           role: formData.role,
         })
@@ -213,7 +210,7 @@ export default function UsersContent({
             ? {
                 ...u,
                 username: formData.username,
-                name: formData.name,
+                name: formData.username,
                 nickname: formData.nickname || null,
                 role: formData.role,
               }
@@ -247,7 +244,7 @@ export default function UsersContent({
           email,
           password: formData.password,
           username: formData.username,
-          name: formData.name,
+          name: formData.username,
           nickname: formData.nickname || undefined,
           role: formData.role,
         })
@@ -265,7 +262,7 @@ export default function UsersContent({
         setUsers([{
           id: result.userId!,
           username: formData.username,
-          name: formData.name,
+          name: formData.username,
           nickname: formData.nickname || null,
           role: formData.role,
           created_at: new Date().toISOString(),
@@ -571,7 +568,7 @@ export default function UsersContent({
               </svg>
               <input
                 type="text"
-                placeholder="이름, 아이디 또는 닉네임으로 검색..."
+                placeholder="아이디 또는 닉네임으로 검색..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
@@ -605,9 +602,6 @@ export default function UsersContent({
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  사용자
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   아이디
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -634,15 +628,12 @@ export default function UsersContent({
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center text-gray-600 font-medium">
-                          {user.name.charAt(0)}
+                          {user.username.charAt(0)}
                         </div>
                         <div className="ml-3">
-                          <p className="font-medium text-gray-900">{user.name}</p>
+                          <p className="font-medium text-gray-900">{user.username}</p>
                         </div>
                       </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-600">
-                      {user.username}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-gray-600">
                       {user.nickname || '-'}
@@ -768,7 +759,7 @@ export default function UsersContent({
                 ))
               ) : (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
                     {searchTerm || filterRole !== 'all'
                       ? '검색 결과가 없습니다.'
                       : '등록된 사용자가 없습니다.'}
@@ -853,22 +844,6 @@ export default function UsersContent({
                   />
                 </div>
               )}
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  이름
-                </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                  placeholder="사용자 이름"
-                  required
-                />
-              </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -998,7 +973,7 @@ export default function UsersContent({
 
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <p className="text-sm text-blue-700">
-                  <strong>{passwordResetUser.name}</strong> ({passwordResetUser.username})님의 비밀번호를 재설정합니다.
+                  <strong>{passwordResetUser.username}</strong>님의 비밀번호를 재설정합니다.
                 </p>
               </div>
 
@@ -1147,7 +1122,7 @@ export default function UsersContent({
 
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <p className="text-sm text-blue-700">
-                  <strong>{selectedUserForGroups.name}</strong> ({selectedUserForGroups.username})님의 그룹을 설정합니다.
+                  <strong>{selectedUserForGroups.username}</strong>님의 그룹을 설정합니다.
                 </p>
               </div>
 

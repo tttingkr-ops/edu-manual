@@ -25,7 +25,7 @@ export default async function MeetingDetailPage({
   // Fetch post with author
   const { data: post } = await supabase
     .from('meeting_posts')
-    .select('*, users!meeting_posts_author_id_fkey(name, nickname)')
+    .select('*, users!meeting_posts_author_id_fkey(username, nickname)')
     .eq('id', id)
     .single()
 
@@ -34,7 +34,7 @@ export default async function MeetingDetailPage({
   // Fetch comments with authors
   const { data: comments } = await supabase
     .from('meeting_comments')
-    .select('*, users!meeting_comments_author_id_fkey(name, nickname)')
+    .select('*, users!meeting_comments_author_id_fkey(username, nickname)')
     .eq('post_id', id)
     .order('created_at', { ascending: true })
 
@@ -62,12 +62,12 @@ export default async function MeetingDetailPage({
     // Get all votes for this post
     const { data: allVotes } = await supabase
       .from('meeting_votes')
-      .select('option_id, user_id, users!meeting_votes_user_id_fkey(name, nickname)')
+      .select('option_id, user_id, users!meeting_votes_user_id_fkey(username, nickname)')
       .eq('post_id', id)
 
     // Count votes per option and collect voter names
     const voteCountMap: Record<string, number> = {}
-    const voterMap: Record<string, { name: string; nickname: string | null }[]> = {}
+    const voterMap: Record<string, { username: string; nickname: string | null }[]> = {}
 
     for (const v of allVotes || []) {
       voteCountMap[v.option_id] = (voteCountMap[v.option_id] || 0) + 1
@@ -87,11 +87,11 @@ export default async function MeetingDetailPage({
     <MeetingDetail
       post={{
         ...post,
-        author_name: post.users?.nickname || post.users?.name || '알 수 없음',
+        author_name: post.users?.nickname || post.users?.username || '알 수 없음',
       }}
       comments={(comments || []).map((c: any) => ({
         ...c,
-        author_name: c.users?.nickname || c.users?.name || '알 수 없음',
+        author_name: c.users?.nickname || c.users?.username || '알 수 없음',
       }))}
       pollOptions={pollOptions}
       userVotes={userVotes}

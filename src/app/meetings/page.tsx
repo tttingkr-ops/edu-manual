@@ -18,7 +18,7 @@ export default async function MeetingsPage() {
 
   const { data: posts } = await supabase
     .from('meeting_posts')
-    .select('*, users!meeting_posts_author_id_fkey(name, nickname)')
+    .select('*, users!meeting_posts_author_id_fkey(username, nickname)')
     .order('created_at', { ascending: false })
 
   // Get comment counts
@@ -43,7 +43,7 @@ export default async function MeetingsPage() {
 
   const postsWithCounts = (posts || []).map((post: any) => ({
     ...post,
-    author_name: post.users?.nickname || post.users?.name || '알 수 없음',
+    author_name: post.users?.nickname || post.users?.username || '알 수 없음',
     comment_count: commentCountMap[post.id] || 0,
     vote_count: voteCountMap[post.id] || 0,
   }))

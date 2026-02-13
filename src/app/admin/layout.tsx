@@ -22,7 +22,7 @@ export default async function AdminLayout({
   // 사용자 정보 조회
   const { data: userData } = await supabase
     .from('users')
-    .select('name, role')
+    .select('username, role')
     .eq('id', user.id)
     .single()
 
@@ -34,7 +34,7 @@ export default async function AdminLayout({
   return (
     <div className="min-h-screen bg-gray-50">
       <Header
-        userName={userData?.name || user.email?.split('@')[0]}
+        userName={userData?.username || user.email?.split('@')[0]}
         userRole="admin"
       />
       <main>{children}</main>

@@ -24,7 +24,6 @@ interface Answer {
   }
   users: {
     id: string
-    name: string | null
     username: string
   }
 }
@@ -178,7 +177,7 @@ export default function ReviewClient({ answers: initialAnswers, adminId }: Revie
                   </span>
                   <div>
                     <p className="font-medium text-gray-900">
-                      {answer.users?.name || answer.users?.username || '알 수 없음'}
+                      {answer.users?.username || '알 수 없음'}
                     </p>
                     <p className="text-sm text-gray-500">
                       {answer.test_questions?.category?.replace(/_/g, ' ')}

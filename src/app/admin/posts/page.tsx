@@ -21,7 +21,7 @@ export default async function PostsPage() {
       .select('post_id, user_id, is_read'),
     supabase
       .from('users')
-      .select('id, name')
+      .select('id, username')
       .eq('role', 'manager'),
   ])
 

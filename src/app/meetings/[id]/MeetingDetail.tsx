@@ -45,7 +45,7 @@ interface PollOption {
   option_text: string
   sort_order: number
   vote_count: number
-  voters: { name: string; nickname: string | null }[]
+  voters: { username: string; nickname: string | null }[]
 }
 
 interface MeetingDetailProps {
@@ -570,7 +570,7 @@ export default function MeetingDetail({
                                     key={idx}
                                     className="inline-flex px-2 py-0.5 text-xs rounded-full bg-white border border-gray-200 text-gray-600"
                                   >
-                                    {voter.nickname || voter.name}
+                                    {voter.nickname || voter.username}
                                   </span>
                                 ))}
                               </div>

@@ -47,7 +47,7 @@ export default async function PostDetailPage({ params }: PageProps) {
   // 댓글 조회 (작성자 정보 포함)
   const { data: comments } = await supabase
     .from('education_comments')
-    .select('*, users!education_comments_author_id_fkey(name, nickname)')
+    .select('*, users!education_comments_author_id_fkey(username, nickname)')
     .eq('post_id', id)
     .order('created_at', { ascending: true })
 
@@ -75,7 +75,7 @@ export default async function PostDetailPage({ params }: PageProps) {
         id: c.id,
         post_id: c.post_id,
         author_id: c.author_id,
-        author_name: c.users?.nickname || c.users?.name || '알 수 없음',
+        author_name: c.users?.nickname || c.users?.username || '알 수 없음',
         content: c.content,
         display_nickname: c.display_nickname,
         created_at: c.created_at,

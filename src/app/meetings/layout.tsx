@@ -20,7 +20,7 @@ export default async function MeetingsLayout({
 
   const { data: userData } = await supabase
     .from('users')
-    .select('name, role, nickname')
+    .select('username, role, nickname')
     .eq('id', user.id)
     .single()
 
@@ -31,7 +31,7 @@ export default async function MeetingsLayout({
   return (
     <div className="min-h-screen bg-gray-50">
       <Header
-        userName={userData.nickname || userData.name || user.email?.split('@')[0]}
+        userName={userData.nickname || userData.username || user.email?.split('@')[0]}
         userRole={userData.role as 'admin' | 'manager'}
       />
       <main>{children}</main>

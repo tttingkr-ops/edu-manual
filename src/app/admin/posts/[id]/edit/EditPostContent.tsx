@@ -52,7 +52,7 @@ export default function EditPostContent({ post, initialGroups, initialTargetUser
   const [groups, setGroups] = useState<{id: string; name: string}[]>([])
   const [targetingType, setTargetingType] = useState<'group' | 'individual'>(post.targeting_type || 'group')
   const [selectedGroups, setSelectedGroups] = useState<string[]>(initialGroups)
-  const [managers, setManagers] = useState<{id: string; name: string; nickname: string | null}[]>([])
+  const [managers, setManagers] = useState<{id: string; username: string; nickname: string | null}[]>([])
   const [selectedManagers, setSelectedManagers] = useState<string[]>(initialTargetUsers)
   const [managerSearch, setManagerSearch] = useState('')
   const [subCategories, setSubCategories] = useState<SubCategory[]>([])
@@ -73,7 +73,7 @@ export default function EditPostContent({ post, initialGroups, initialTargetUser
       const [{ data: subCatData }, { data: groupsData }, { data: managersData }] = await Promise.all([
         supabase.from('sub_categories').select('*').order('sort_order').order('name'),
         supabase.from('groups').select('id, name').order('name'),
-        supabase.from('users').select('id, name, nickname').eq('role', 'manager').order('name'),
+        supabase.from('users').select('id, username, nickname').eq('role', 'manager').order('username'),
       ])
       setSubCategories(subCatData || [])
       setGroups(groupsData || [])
@@ -136,7 +136,7 @@ export default function EditPostContent({ post, initialGroups, initialTargetUser
 
   const filteredManagers = managers.filter(m => {
     const search = managerSearch.toLowerCase()
-    return m.name.toLowerCase().includes(search) || (m.nickname && m.nickname.toLowerCase().includes(search))
+    return m.username.toLowerCase().includes(search) || (m.nickname && m.nickname.toLowerCase().includes(search))
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -508,7 +508,7 @@ export default function EditPostContent({ post, initialGroups, initialTargetUser
                             className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                           />
                           <span className="text-gray-700">
-                            {manager.name}
+                            {manager.username}
                             {manager.nickname && (
                               <span className="text-gray-400 ml-1">({manager.nickname})</span>
                             )}
