@@ -218,7 +218,11 @@ export default function UsersContent({
           throw new Error('비밀번호는 6자 이상이어야 합니다.')
         }
 
-        const email = `${formData.username}@ttting.com`
+        // ASCII면 그대로, 한글 등 비ASCII면 랜덤 ID로 이메일 생성
+        const isAscii = /^[\x00-\x7F]+$/.test(formData.username)
+        const email = isAscii
+          ? `${formData.username}@ttting.com`
+          : `u_${Date.now().toString(36)}@ttting.com`
 
         const result = await createUserAction({
           email,

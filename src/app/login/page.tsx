@@ -13,21 +13,30 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
 
-  const toEmail = (input: string) => {
-    const trimmed = input.trim()
-    if (trimmed.includes('@')) return trimmed
-    return `${trimmed}@ttting.com`
-  }
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
     setError('')
 
     try {
-      // Supabase Auth 로그인
+      // 1. 아이디 → 이메일 변환 (한글 등 비ASCII 지원)
+      const res = await fetch('/api/auth/resolve-username', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: username.trim() }),
+      })
+
+      const { email, error: resolveError } = await res.json()
+
+      if (!res.ok || !email) {
+        setError(resolveError || '아이디를 확인해주세요.')
+        setIsLoading(false)
+        return
+      }
+
+      // 2. Supabase Auth 로그인
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: toEmail(username),
+        email,
         password,
       })
 
