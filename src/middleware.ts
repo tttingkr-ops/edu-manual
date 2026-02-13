@@ -27,7 +27,7 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // 공개 경로 (로그인 필요 없음)
-  const publicPaths = ['/login', '/auth/callback']
+  const publicPaths = ['/login', '/auth/callback', '/api/auth/resolve-username']
   const isPublicPath = publicPaths.some(path => pathname.startsWith(path))
 
   // 로그인하지 않은 경우
