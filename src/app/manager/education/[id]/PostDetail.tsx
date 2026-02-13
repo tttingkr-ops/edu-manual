@@ -29,22 +29,43 @@ interface RelatedQuestion {
   max_score: number
 }
 
+interface Comment {
+  id: string
+  post_id: string
+  author_id: string
+  author_name: string
+  content: string
+  display_nickname: string | null
+  created_at: string
+}
+
 interface PostDetailProps {
   post: Post
   userId: string
+  userRole: string
   hasRelatedTest: boolean
   relatedQuestions?: RelatedQuestion[]
+  comments?: Comment[]
+  nicknames?: string[]
 }
 
 export default function PostDetail({
   post,
   userId,
+  userRole,
   hasRelatedTest,
   relatedQuestions = [],
+  comments: initialComments = [],
+  nicknames = [],
 }: PostDetailProps) {
   const router = useRouter()
   const supabase = createClient()
   const [showRelatedTests, setShowRelatedTests] = useState(false)
+
+  // Comment state
+  const [newComment, setNewComment] = useState('')
+  const [selectedNickname, setSelectedNickname] = useState('')
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false)
 
   // 페이지 진입 시 읽음 상태 업데이트
   useEffect(() => {
@@ -76,6 +97,27 @@ export default function PostDetail({
     })
   }
 
+  const formatRelativeDate = (dateString: string) => {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / (1000 * 60))
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+    if (diffMins < 1) return '방금 전'
+    if (diffMins < 60) return `${diffMins}분 전`
+    if (diffHours < 24) return `${diffHours}시간 전`
+    if (diffDays < 7) return `${diffDays}일 전`
+
+    return date.toLocaleDateString('ko-KR', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
+
   const getCategoryLabel = (cat: string) => {
     const labels: Record<string, string> = {
       '남자_매니저_대화': '남자 매니저 대화',
@@ -92,6 +134,70 @@ export default function PostDetail({
       /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/
     const match = url.match(regExp)
     return match && match[2].length === 11 ? match[2] : null
+  }
+
+  // Comment handlers
+  const handleAddComment = async () => {
+    if (!newComment.trim() || isSubmittingComment) return
+    setIsSubmittingComment(true)
+
+    try {
+      const { error } = await supabase.from('education_comments').insert({
+        post_id: post.id,
+        author_id: userId,
+        content: newComment.trim(),
+        display_nickname: selectedNickname || null,
+      })
+
+      if (error) throw error
+
+      setNewComment('')
+      setSelectedNickname('')
+      router.refresh()
+    } catch (err: any) {
+      console.error('Comment error:', err)
+      alert('댓글 등록 중 오류가 발생했습니다.')
+    } finally {
+      setIsSubmittingComment(false)
+    }
+  }
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!confirm('댓글을 삭제하시겠습니까?')) return
+
+    try {
+      const { error } = await supabase
+        .from('education_comments')
+        .delete()
+        .eq('id', commentId)
+
+      if (error) throw error
+
+      router.refresh()
+    } catch (err: any) {
+      console.error('Delete comment error:', err)
+      alert('댓글 삭제 중 오류가 발생했습니다.')
+    }
+  }
+
+  const renderCommentAuthor = (comment: Comment) => {
+    if (comment.display_nickname) {
+      return (
+        <>
+          <span className="text-sm font-semibold text-gray-900">
+            {comment.display_nickname}
+          </span>
+          <span className="text-xs text-gray-400">
+            ({comment.author_name})
+          </span>
+        </>
+      )
+    }
+    return (
+      <span className="text-sm font-medium text-gray-900">
+        {comment.author_name}
+      </span>
+    )
   }
 
   return (
@@ -324,6 +430,113 @@ export default function PostDetail({
           </div>
         </div>
       )}
+
+      {/* 댓글 섹션 */}
+      <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-200">
+        <div className="p-6 border-b border-gray-100">
+          <h2 className="text-lg font-semibold text-gray-900">
+            댓글
+            <span className="ml-2 text-sm font-normal text-gray-500">
+              {initialComments.length}개
+            </span>
+          </h2>
+        </div>
+
+        {/* 댓글 목록 */}
+        {initialComments.length > 0 ? (
+          <div className="divide-y divide-gray-100">
+            {initialComments.map((comment) => (
+              <div key={comment.id} className="p-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    <div className="w-8 h-8 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center text-sm font-medium flex-shrink-0">
+                      {(comment.display_nickname || comment.author_name).charAt(0)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        {renderCommentAuthor(comment)}
+                        <span className="text-xs text-gray-400">
+                          {formatRelativeDate(comment.created_at)}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                        {comment.content}
+                      </p>
+                    </div>
+                  </div>
+                  {(comment.author_id === userId || userRole === 'admin') && (
+                    <button
+                      onClick={() => handleDeleteComment(comment.id)}
+                      className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
+                      title="댓글 삭제"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="p-8 text-center text-sm text-gray-400">
+            아직 댓글이 없습니다. 첫 댓글을 남겨보세요.
+          </div>
+        )}
+
+        {/* 댓글 작성 */}
+        <div className="p-6 border-t border-gray-100 bg-gray-50 rounded-b-xl">
+          <div className="flex gap-3">
+            <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-sm font-medium flex-shrink-0">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              {/* 닉네임 드롭다운 */}
+              {nicknames.length > 0 && (
+                <div className="mb-2">
+                  <select
+                    value={selectedNickname}
+                    onChange={(e) => setSelectedNickname(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
+                  >
+                    <option value="">닉네임 선택 (선택사항)</option>
+                    {nicknames.map((nick) => (
+                      <option key={nick} value={nick}>
+                        {nick}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <textarea
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                placeholder="댓글을 입력하세요..."
+                rows={3}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none text-sm"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                    handleAddComment()
+                  }
+                }}
+              />
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-xs text-gray-400">Ctrl+Enter로 등록</span>
+                <button
+                  onClick={handleAddComment}
+                  disabled={!newComment.trim() || isSubmittingComment}
+                  className="px-4 py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isSubmittingComment ? '등록 중...' : '댓글 등록'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* 학습 완료 알림 */}
       <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3">

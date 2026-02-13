@@ -38,6 +38,16 @@ export default async function MeetingDetailPage({
     .eq('post_id', id)
     .order('created_at', { ascending: true })
 
+  // 닉네임 목록 조회 (users 테이블에서 nickname이 있는 사용자)
+  const { data: nicknameUsers } = await supabase
+    .from('users')
+    .select('nickname')
+    .not('nickname', 'is', null)
+
+  const nicknames = (nicknameUsers || [])
+    .map((u: any) => u.nickname)
+    .filter((n: string | null): n is string => !!n)
+
   // For polls: fetch options with vote counts
   let pollOptions: any[] = []
   let userVotes: string[] = []
@@ -87,6 +97,7 @@ export default async function MeetingDetailPage({
       userVotes={userVotes}
       currentUserId={user.id}
       userRole={userData?.role || 'manager'}
+      nicknames={nicknames}
     />
   )
 }

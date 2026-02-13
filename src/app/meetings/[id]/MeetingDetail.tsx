@@ -36,6 +36,7 @@ interface Comment {
   author_id: string
   author_name: string
   content: string
+  display_nickname: string | null
   created_at: string
 }
 
@@ -54,6 +55,7 @@ interface MeetingDetailProps {
   userVotes: string[]
   currentUserId: string
   userRole: string
+  nicknames?: string[]
 }
 
 export default function MeetingDetail({
@@ -63,6 +65,7 @@ export default function MeetingDetail({
   userVotes,
   currentUserId,
   userRole,
+  nicknames = [],
 }: MeetingDetailProps) {
   const router = useRouter()
   const supabase = createClient()
@@ -73,6 +76,7 @@ export default function MeetingDetail({
 
   // Comment state
   const [newComment, setNewComment] = useState('')
+  const [selectedNickname, setSelectedNickname] = useState('')
   const [isSubmittingComment, setIsSubmittingComment] = useState(false)
 
   // Poll state
@@ -248,11 +252,13 @@ export default function MeetingDetail({
         post_id: post.id,
         author_id: currentUserId,
         content: newComment.trim(),
+        display_nickname: selectedNickname || null,
       })
 
       if (error) throw error
 
       setNewComment('')
+      setSelectedNickname('')
       router.refresh()
     } catch (err: any) {
       console.error('Comment error:', err)
@@ -600,13 +606,24 @@ export default function MeetingDetail({
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-start gap-3 flex-1 min-w-0">
                     <div className="w-8 h-8 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center text-sm font-medium flex-shrink-0">
-                      {comment.author_name.charAt(0)}
+                      {(comment.display_nickname || comment.author_name).charAt(0)}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-sm font-medium text-gray-900">
-                          {comment.author_name}
-                        </span>
+                        {comment.display_nickname ? (
+                          <>
+                            <span className="text-sm font-semibold text-gray-900">
+                              {comment.display_nickname}
+                            </span>
+                            <span className="text-xs text-gray-400">
+                              ({comment.author_name})
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-sm font-medium text-gray-900">
+                            {comment.author_name}
+                          </span>
+                        )}
                         <span className="text-xs text-gray-400">
                           {formatRelativeDate(comment.created_at)}
                         </span>
@@ -646,6 +663,23 @@ export default function MeetingDetail({
               </svg>
             </div>
             <div className="flex-1">
+              {/* 닉네임 드롭다운 */}
+              {nicknames.length > 0 && (
+                <div className="mb-2">
+                  <select
+                    value={selectedNickname}
+                    onChange={(e) => setSelectedNickname(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
+                  >
+                    <option value="">닉네임 선택 (선택사항)</option>
+                    {nicknames.map((nick) => (
+                      <option key={nick} value={nick}>
+                        {nick}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <textarea
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}

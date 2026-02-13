@@ -500,6 +500,7 @@ export interface Database {
           post_id: string;
           author_id: string;
           content: string;
+          display_nickname: string | null;
           created_at: string;
         };
         Insert: {
@@ -507,6 +508,7 @@ export interface Database {
           post_id: string;
           author_id: string;
           content: string;
+          display_nickname?: string | null;
           created_at?: string;
         };
         Update: {
@@ -514,6 +516,7 @@ export interface Database {
           post_id?: string;
           author_id?: string;
           content?: string;
+          display_nickname?: string | null;
           created_at?: string;
         };
         Relationships: [
@@ -597,6 +600,46 @@ export interface Database {
           {
             foreignKeyName: 'meeting_votes_user_id_fkey';
             columns: ['user_id'];
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+      education_comments: {
+        Row: {
+          id: string;
+          post_id: string;
+          author_id: string;
+          content: string;
+          display_nickname: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          post_id: string;
+          author_id: string;
+          content: string;
+          display_nickname?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          post_id?: string;
+          author_id?: string;
+          content?: string;
+          display_nickname?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'education_comments_post_id_fkey';
+            columns: ['post_id'];
+            referencedRelation: 'educational_posts';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'education_comments_author_id_fkey';
+            columns: ['author_id'];
             referencedRelation: 'users';
             referencedColumns: ['id'];
           }

@@ -20,6 +20,13 @@ export default async function PostDetailPage({ params }: PageProps) {
     return null
   }
 
+  // 현재 사용자 역할 조회
+  const { data: userData } = await supabase
+    .from('users')
+    .select('id, role')
+    .eq('id', user.id)
+    .single()
+
   // 게시물 조회
   const { data: post, error } = await supabase
     .from('educational_posts')
@@ -37,15 +44,43 @@ export default async function PostDetailPage({ params }: PageProps) {
     .select('id, question, question_type, question_image_url, options, correct_answer, max_score')
     .eq('related_post_id', id)
 
+  // 댓글 조회 (작성자 정보 포함)
+  const { data: comments } = await supabase
+    .from('education_comments')
+    .select('*, users!education_comments_author_id_fkey(name, nickname)')
+    .eq('post_id', id)
+    .order('created_at', { ascending: true })
+
+  // 닉네임 목록 조회 (users 테이블에서 nickname이 있는 사용자)
+  const { data: nicknameUsers } = await supabase
+    .from('users')
+    .select('nickname')
+    .not('nickname', 'is', null)
+
+  const nicknames = (nicknameUsers || [])
+    .map((u: any) => u.nickname)
+    .filter((n: string | null): n is string => !!n)
+
   return (
     <PostDetail
       post={post}
       userId={user.id}
+      userRole={userData?.role || 'manager'}
       hasRelatedTest={(relatedQuestions?.length || 0) > 0}
       relatedQuestions={(relatedQuestions || []).map(q => ({
         ...q,
         options: q.options as string[] | null,
       }))}
+      comments={(comments || []).map((c: any) => ({
+        id: c.id,
+        post_id: c.post_id,
+        author_id: c.author_id,
+        author_name: c.users?.nickname || c.users?.name || '알 수 없음',
+        content: c.content,
+        display_nickname: c.display_nickname,
+        created_at: c.created_at,
+      }))}
+      nicknames={nicknames}
     />
   )
 }
