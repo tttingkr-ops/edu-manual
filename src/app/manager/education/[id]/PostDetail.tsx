@@ -6,7 +6,6 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
 import { createClient } from '@/lib/supabase/client'
-import { addCommentAction, deleteCommentAction } from '../actions'
 
 interface Post {
   id: string
@@ -137,28 +136,27 @@ export default function PostDetail({
     return match && match[2].length === 11 ? match[2] : null
   }
 
-  // Comment handlers - Server Actions 사용
+  // Comment handlers - 클라이언트 Supabase 직접 사용 (meeting_comments와 동일 방식)
   const handleAddComment = async () => {
     if (!newComment.trim() || isSubmittingComment) return
     setIsSubmittingComment(true)
 
     try {
-      const result = await addCommentAction(
-        post.id,
-        newComment.trim(),
-        selectedNickname || null,
-      )
+      const { error } = await supabase.from('education_comments').insert({
+        post_id: post.id,
+        author_id: userId,
+        content: newComment.trim(),
+        display_nickname: selectedNickname || null,
+      })
 
-      if (!result.success) {
-        throw new Error(result.error)
-      }
+      if (error) throw error
 
       setNewComment('')
       setSelectedNickname('')
       router.refresh()
     } catch (err: any) {
       console.error('Comment error:', err)
-      alert(err.message || '댓글 등록 중 오류가 발생했습니다.')
+      alert('댓글 등록 중 오류가 발생했습니다.')
     } finally {
       setIsSubmittingComment(false)
     }
@@ -168,16 +166,17 @@ export default function PostDetail({
     if (!confirm('댓글을 삭제하시겠습니까?')) return
 
     try {
-      const result = await deleteCommentAction(commentId)
+      const { error } = await supabase
+        .from('education_comments')
+        .delete()
+        .eq('id', commentId)
 
-      if (!result.success) {
-        throw new Error(result.error)
-      }
+      if (error) throw error
 
       router.refresh()
     } catch (err: any) {
       console.error('Delete comment error:', err)
-      alert(err.message || '댓글 삭제 중 오류가 발생했습니다.')
+      alert('댓글 삭제 중 오류가 발생했습니다.')
     }
   }
 
