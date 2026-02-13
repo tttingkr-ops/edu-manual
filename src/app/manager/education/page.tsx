@@ -14,6 +14,16 @@ export default async function EducationPage() {
     return null
   }
 
+  // 사용자 역할 조회
+  const { data: userData } = await supabase
+    .from('users')
+    .select('role')
+    .eq('id', user.id)
+    .single()
+
+  const userRole = userData?.role || 'manager'
+  const isAdmin = userRole === 'admin'
+
   // 모든 교육 게시물 + 서브카테고리 + 읽음 상태 + 타겟팅 정보 조회
   const [
     { data: posts },
@@ -70,16 +80,18 @@ export default async function EducationPage() {
     postGroupMap.set(pg.post_id, existing)
   }
 
-  // 타겟팅 기준으로 게시물 필터링
-  const filteredPosts = (posts || []).filter((post: any) => {
-    if (post.targeting_type === 'individual') {
-      return individuallyTargetedPostIds.has(post.id)
-    }
-    // targeting_type === 'group' (또는 레거시 게시물)
-    const postGroupNames = postGroupMap.get(post.id) || []
-    if (postGroupNames.length === 0) return true // 그룹 미지정 게시물은 모두에게 공개
-    return postGroupNames.some(gn => userGroupNames.has(gn))
-  })
+  // 타겟팅 기준으로 게시물 필터링 (관리자는 모든 게시물 열람 가능)
+  const filteredPosts = isAdmin
+    ? (posts || [])
+    : (posts || []).filter((post: any) => {
+        if (post.targeting_type === 'individual') {
+          return individuallyTargetedPostIds.has(post.id)
+        }
+        // targeting_type === 'group' (또는 레거시 게시물)
+        const postGroupNames = postGroupMap.get(post.id) || []
+        if (postGroupNames.length === 0) return true // 그룹 미지정 게시물은 모두에게 공개
+        return postGroupNames.some(gn => userGroupNames.has(gn))
+      })
 
   // 읽음 상태를 Map으로 변환
   const readStatusMap = new Map(
@@ -93,10 +105,15 @@ export default async function EducationPage() {
   }))
 
   // 사용자 그룹 → 허용 카테고리 계산 (그룹명의 공백을 언더스코어로 변환)
-  const userGroupNamesList = Array.from(userGroupNames)
-  const allowedCategories = userGroupNamesList.length > 0
-    ? userGroupNamesList.map(name => name.replace(/ /g, '_'))
-    : null // null = 모든 카테고리 접근 가능
+  // 관리자는 모든 카테고리 접근 가능
+  const allowedCategories = isAdmin
+    ? null
+    : (() => {
+        const userGroupNamesList = Array.from(userGroupNames)
+        return userGroupNamesList.length > 0
+          ? userGroupNamesList.map(name => name.replace(/ /g, '_'))
+          : null
+      })()
 
-  return <EducationContent posts={postsWithReadStatus} subCategories={subCategories || []} allowedCategories={allowedCategories} />
+  return <EducationContent posts={postsWithReadStatus} subCategories={subCategories || []} allowedCategories={allowedCategories} userRole={userRole} />
 }

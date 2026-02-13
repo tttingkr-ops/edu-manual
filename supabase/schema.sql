@@ -197,43 +197,44 @@ CREATE POLICY "users_update_own" ON public.users
 
 -- --------------------------------------------
 -- EDUCATIONAL_POSTS 테이블 RLS 정책
--- 모두 읽기 가능, 관리자만 생성/수정/삭제
+-- 모두 읽기 가능, 인증된 사용자 생성 가능
+-- admin은 모든 글 수정/삭제, manager는 본인 글만 수정/삭제
 -- --------------------------------------------
 CREATE POLICY "educational_posts_select_all" ON public.educational_posts
     FOR SELECT
     USING (true);
 
-CREATE POLICY "educational_posts_insert_admin" ON public.educational_posts
+CREATE POLICY "educational_posts_insert_authenticated" ON public.educational_posts
     FOR INSERT
     WITH CHECK (
-        EXISTS (
-            SELECT 1 FROM public.users
-            WHERE id = auth.uid() AND role = 'admin'
-        )
+        auth.uid() IS NOT NULL
     );
 
-CREATE POLICY "educational_posts_update_admin" ON public.educational_posts
+CREATE POLICY "educational_posts_update_admin_or_own" ON public.educational_posts
     FOR UPDATE
     USING (
         EXISTS (
             SELECT 1 FROM public.users
             WHERE id = auth.uid() AND role = 'admin'
         )
+        OR author_id = auth.uid()
     )
     WITH CHECK (
         EXISTS (
             SELECT 1 FROM public.users
             WHERE id = auth.uid() AND role = 'admin'
         )
+        OR author_id = auth.uid()
     );
 
-CREATE POLICY "educational_posts_delete_admin" ON public.educational_posts
+CREATE POLICY "educational_posts_delete_admin_or_own" ON public.educational_posts
     FOR DELETE
     USING (
         EXISTS (
             SELECT 1 FROM public.users
             WHERE id = auth.uid() AND role = 'admin'
         )
+        OR author_id = auth.uid()
     );
 
 -- --------------------------------------------

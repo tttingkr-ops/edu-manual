@@ -30,6 +30,7 @@ interface EducationContentProps {
   posts: Post[]
   subCategories: SubCategory[]
   allowedCategories: string[] | null // null = 모든 카테고리 접근 가능
+  userRole: string
 }
 
 const ALL_CATEGORIES = [
@@ -40,7 +41,7 @@ const ALL_CATEGORIES = [
   { id: '개인_피드백', label: '개인 피드백' },
 ]
 
-export default function EducationContent({ posts, subCategories, allowedCategories }: EducationContentProps) {
+export default function EducationContent({ posts, subCategories, allowedCategories, userRole }: EducationContentProps) {
   // 허용된 카테고리만 필터링
   const CATEGORIES = allowedCategories
     ? ALL_CATEGORIES.filter(c => allowedCategories.includes(c.id))
@@ -74,11 +75,22 @@ export default function EducationContent({ posts, subCategories, allowedCategori
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* 페이지 헤더 */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">교육 자료</h1>
-        <p className="mt-2 text-gray-600">
-          각 카테고리별 교육 자료를 학습하세요. 미확인 자료는 강조 표시됩니다.
-        </p>
+      <div className="mb-8 flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">교육 자료</h1>
+          <p className="mt-2 text-gray-600">
+            각 카테고리별 교육 자료를 학습하세요. 미확인 자료는 강조 표시됩니다.
+          </p>
+        </div>
+        <Link
+          href="/manager/education/new"
+          className="flex-shrink-0 inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          글쓰기
+        </Link>
       </div>
 
       {/* 테스트 바로가기 */}

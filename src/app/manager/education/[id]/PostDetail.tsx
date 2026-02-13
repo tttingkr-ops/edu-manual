@@ -61,6 +61,8 @@ export default function PostDetail({
   const router = useRouter()
   const supabase = createClient()
   const [showRelatedTests, setShowRelatedTests] = useState(false)
+  const [isDeletingPost, setIsDeletingPost] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   // Comment state
   const [newComment, setNewComment] = useState('')
@@ -181,6 +183,26 @@ export default function PostDetail({
     }
   }
 
+  // 게시물 삭제 핸들러
+  const handleDeletePost = async () => {
+    setIsDeletingPost(true)
+    try {
+      const { error } = await supabase
+        .from('educational_posts')
+        .delete()
+        .eq('id', post.id)
+
+      if (error) throw error
+
+      router.push('/manager/education')
+    } catch (err: any) {
+      console.error('Delete post error:', err)
+      alert('게시물 삭제 중 오류가 발생했습니다.')
+      setIsDeletingPost(false)
+      setShowDeleteConfirm(false)
+    }
+  }
+
   const renderCommentAuthor = (comment: Comment) => {
     if (comment.display_nickname) {
       return (
@@ -227,20 +249,30 @@ export default function PostDetail({
       {/* 게시물 헤더 */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="p-6 border-b border-gray-200">
-          {/* 카테고리 & 타입 */}
-          <div className="flex items-center gap-3 mb-4">
-            <span className="px-3 py-1 bg-primary-100 text-primary-700 text-sm font-medium rounded-full">
-              {getCategoryLabel(post.category)}
-            </span>
-            <span
-              className={`px-3 py-1 text-sm font-medium rounded-full ${
-                post.content_type === 'video'
-                  ? 'bg-red-100 text-red-700'
-                  : 'bg-blue-100 text-blue-700'
-              }`}
-            >
-              {post.content_type === 'video' ? '영상' : '문서'}
-            </span>
+          {/* 카테고리 & 타입 & 삭제 */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <span className="px-3 py-1 bg-primary-100 text-primary-700 text-sm font-medium rounded-full">
+                {getCategoryLabel(post.category)}
+              </span>
+              <span
+                className={`px-3 py-1 text-sm font-medium rounded-full ${
+                  post.content_type === 'video'
+                    ? 'bg-red-100 text-red-700'
+                    : 'bg-blue-100 text-blue-700'
+                }`}
+              >
+                {post.content_type === 'video' ? '영상' : '문서'}
+              </span>
+            </div>
+            {(post.author_id === userId || userRole === 'admin') && (
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 border border-red-200 rounded-lg transition-colors"
+              >
+                삭제
+              </button>
+            )}
           </div>
 
           {/* 제목 */}
@@ -558,6 +590,34 @@ export default function PostDetail({
           이 교육 자료를 확인하셨습니다. 학습 현황에 반영됩니다.
         </p>
       </div>
+
+      {/* 삭제 확인 모달 */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm mx-4 w-full">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">게시물 삭제</h3>
+            <p className="text-sm text-gray-600 mb-6">
+              이 교육 자료를 삭제하시겠습니까? 삭제된 자료는 복구할 수 없습니다.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={isDeletingPost}
+                className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleDeletePost}
+                disabled={isDeletingPost}
+                className="px-4 py-2 text-sm text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {isDeletingPost ? '삭제 중...' : '삭제'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
