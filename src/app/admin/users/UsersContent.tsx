@@ -55,7 +55,6 @@ export default function UsersContent({
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [passwordResetUser, setPasswordResetUser] = useState<User | null>(null)
   const [formData, setFormData] = useState({
-    email: '',
     password: '',
     username: '',
     name: '',
@@ -91,7 +90,7 @@ export default function UsersContent({
   // 모달 열기 (추가)
   const openAddModal = () => {
     setEditingUser(null)
-    setFormData({ email: '', password: '', username: '', name: '', nickname: '', role: 'manager' })
+    setFormData({ password: '', username: '', name: '', nickname: '', role: 'manager' })
     setError(null)
     setShowModal(true)
   }
@@ -100,7 +99,6 @@ export default function UsersContent({
   const openEditModal = (user: User) => {
     setEditingUser(user)
     setFormData({
-      email: '',
       password: '',
       username: user.username,
       name: user.name,
@@ -115,7 +113,7 @@ export default function UsersContent({
   const closeModal = () => {
     setShowModal(false)
     setEditingUser(null)
-    setFormData({ email: '', password: '', username: '', name: '', nickname: '', role: 'manager' })
+    setFormData({ password: '', username: '', name: '', nickname: '', role: 'manager' })
     setError(null)
   }
 
@@ -212,16 +210,18 @@ export default function UsersContent({
         ))
       } else {
         // 추가 - Auth와 함께 사용자 생성
-        if (!formData.email || !formData.password) {
-          throw new Error('이메일과 비밀번호는 필수입니다.')
+        if (!formData.username || !formData.password) {
+          throw new Error('아이디와 비밀번호는 필수입니다.')
         }
 
         if (formData.password.length < 6) {
           throw new Error('비밀번호는 6자 이상이어야 합니다.')
         }
 
+        const email = `${formData.username}@ttting.com`
+
         const result = await createUserAction({
-          email: formData.email,
+          email,
           password: formData.password,
           username: formData.username,
           name: formData.name,
@@ -778,48 +778,9 @@ export default function UsersContent({
                 </div>
               )}
 
-              {/* 새 사용자 추가 시에만 이메일/비밀번호 표시 */}
-              {!editingUser && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      이메일 <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) =>
-                        setFormData({ ...formData, email: e.target.value })
-                      }
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      placeholder="user@example.com"
-                      required
-                    />
-                    <p className="mt-1 text-xs text-gray-500">로그인에 사용됩니다</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      비밀번호 <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="password"
-                      value={formData.password}
-                      onChange={(e) =>
-                        setFormData({ ...formData, password: e.target.value })
-                      }
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      placeholder="6자 이상"
-                      minLength={6}
-                      required
-                    />
-                  </div>
-                </>
-              )}
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  아이디
+                  아이디 (로그인용) <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -828,10 +789,33 @@ export default function UsersContent({
                     setFormData({ ...formData, username: e.target.value })
                   }
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                  placeholder="사용자 아이디"
+                  placeholder="영문, 한글 등 자유 입력"
                   required
                 />
+                {!editingUser && (
+                  <p className="mt-1 text-xs text-gray-500">이 아이디로 로그인합니다</p>
+                )}
               </div>
+
+              {/* 새 사용자 추가 시에만 비밀번호 표시 */}
+              {!editingUser && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    비밀번호 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={formData.password}
+                    onChange={(e) =>
+                      setFormData({ ...formData, password: e.target.value })
+                    }
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="6자 이상"
+                    minLength={6}
+                    required
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
