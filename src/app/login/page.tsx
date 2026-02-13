@@ -8,10 +8,16 @@ import { createClient } from '@/lib/supabase/client'
 export default function LoginPage() {
   const router = useRouter()
   const supabase = createClient()
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+
+  const toEmail = (input: string) => {
+    const trimmed = input.trim()
+    if (trimmed.includes('@')) return trimmed
+    return `${trimmed}@ttting.com`
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -21,12 +27,12 @@ export default function LoginPage() {
     try {
       // Supabase Auth 로그인
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email,
+        email: toEmail(username),
         password,
       })
 
       if (authError) {
-        setError('이메일 또는 비밀번호가 올바르지 않습니다.')
+        setError('아이디 또는 비밀번호가 올바르지 않습니다.')
         setIsLoading(false)
         return
       }
@@ -78,20 +84,20 @@ export default function LoginPage() {
           </h2>
 
           <form onSubmit={handleLogin} className="space-y-5">
-            {/* 이메일 입력 */}
+            {/* 아이디 입력 */}
             <div>
               <label
-                htmlFor="email"
+                htmlFor="username"
                 className="block text-sm font-medium text-gray-700 mb-2"
               >
-                이메일
+                아이디
               </label>
               <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="example@company.com"
+                id="username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="아이디를 입력하세요"
                 required
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all"
               />
