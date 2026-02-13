@@ -26,14 +26,33 @@ export default async function UsersPage() {
     .order('created_at', { ascending: true })
 
   // 교육 카테고리에 해당하는 그룹이 없으면 자동 생성
+  // 그룹명은 공백 버전(label)과 언더스코어 버전(id) 모두 체크
   const existingGroupNames = new Set((groups || []).map((g: any) => g.name))
   for (const cat of EDUCATION_CATEGORIES) {
-    if (!existingGroupNames.has(cat.label)) {
+    const hasSpaceVersion = existingGroupNames.has(cat.label)
+    const hasUnderscoreVersion = existingGroupNames.has(cat.id)
+    if (!hasSpaceVersion && !hasUnderscoreVersion) {
       await supabase.from('groups').insert({ name: cat.label })
     }
   }
 
-  // 자동 생성 후 그룹 목록 다시 조회
+  // 중복 그룹 정리: 공백 버전과 언더스코어 버전이 동시에 존재하면 공백 버전 삭제
+  // (기존 사용자 할당이 언더스코어 버전에 연결되어 있으므로 언더스코어 버전 유지)
+  const { data: allGroups } = await supabase
+    .from('groups')
+    .select('*')
+    .order('created_at', { ascending: true })
+
+  for (const cat of EDUCATION_CATEGORIES) {
+    const spaceGroup = (allGroups || []).find((g: any) => g.name === cat.label)
+    const underscoreGroup = (allGroups || []).find((g: any) => g.name === cat.id)
+    if (spaceGroup && underscoreGroup) {
+      // 둘 다 존재하면 공백 버전 삭제 (언더스코어 버전에 기존 할당 유지)
+      await supabase.from('groups').delete().eq('id', spaceGroup.id)
+    }
+  }
+
+  // 정리 후 그룹 목록 다시 조회
   const { data: updatedGroups } = await supabase
     .from('groups')
     .select('*')
