@@ -11,6 +11,7 @@ const ALLOWED_CATEGORIES = [
   '여자_매니저_대화',
   '여자_매니저_소개',
   '추가_서비스_규칙',
+  '개인_피드백',
 ] as const
 
 type CategoryType = typeof ALLOWED_CATEGORIES[number]

@@ -9,7 +9,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 
 type ContentType = 'video' | 'document'
-type Category = '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개' | '추가_서비스_규칙'
+type Category = '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개' | '추가_서비스_규칙' | '개인_피드백'
 
 interface Post {
   id: string
@@ -42,6 +42,7 @@ const CATEGORIES: { value: Category; label: string }[] = [
   { value: '여자_매니저_대화', label: '여자 매니저 대화' },
   { value: '여자_매니저_소개', label: '여자 매니저 소개' },
   { value: '추가_서비스_규칙', label: '추가 서비스 규칙' },
+  { value: '개인_피드백', label: '개인 피드백' },
 ]
 
 export default function EditPostContent({ post, initialGroups, initialTargetUsers }: EditPostContentProps) {

@@ -28,7 +28,7 @@ function serializeQuestionImages(urls: string[]): string | null {
 
 const ITEMS_PER_PAGE = 20
 
-type Category = '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개' | '추가_서비스_규칙'
+type Category = '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개' | '추가_서비스_규칙' | '개인_피드백'
 
 interface Question {
   id: string
@@ -68,6 +68,7 @@ const CATEGORIES: { value: Category; label: string }[] = [
   { value: '여자_매니저_대화', label: '여자 매니저 대화' },
   { value: '여자_매니저_소개', label: '여자 매니저 소개' },
   { value: '추가_서비스_규칙', label: '추가 서비스 규칙' },
+  { value: '개인_피드백', label: '개인 피드백' },
 ]
 
 export default function TestsContent({ questions: initialQuestions }: TestsContentProps) {
@@ -198,6 +199,8 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
         return 'bg-purple-100 text-purple-800'
       case '추가_서비스_규칙':
         return 'bg-orange-100 text-orange-800'
+      case '개인_피드백':
+        return 'bg-teal-100 text-teal-800'
       default:
         return 'bg-gray-100 text-gray-800'
     }

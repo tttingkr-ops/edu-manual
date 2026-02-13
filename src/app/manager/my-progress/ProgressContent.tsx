@@ -31,6 +31,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   '여자_매니저_대화': '여자 매니저 대화',
   '여자_매니저_소개': '여자 매니저 소개',
   '추가_서비스_규칙': '추가 서비스 규칙',
+  '개인_피드백': '개인 피드백',
 }
 
 export default function ProgressContent({

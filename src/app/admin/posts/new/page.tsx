@@ -12,13 +12,14 @@ import QuestionBuilder, { QuestionData } from '@/components/QuestionBuilder'
 import MarkdownEditor from '@/components/MarkdownEditor'
 
 type ContentType = 'video' | 'document'
-type Category = '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개' | '추가_서비스_규칙'
+type Category = '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개' | '추가_서비스_규칙' | '개인_피드백'
 
 const CATEGORIES: { value: Category; label: string }[] = [
   { value: '남자_매니저_대화', label: '남자 매니저 대화' },
   { value: '여자_매니저_대화', label: '여자 매니저 대화' },
   { value: '여자_매니저_소개', label: '여자 매니저 소개' },
   { value: '추가_서비스_규칙', label: '추가 서비스 규칙' },
+  { value: '개인_피드백', label: '개인 피드백' },
 ]
 
 interface SubCategory {
@@ -50,7 +51,7 @@ export default function NewPostPage() {
   const [isAddingNewSubCategory, setIsAddingNewSubCategory] = useState(false)
   const [newSubCategoryName, setNewSubCategoryName] = useState('')
   const [externalLink, setExternalLink] = useState('')
-  const validCategories: Category[] = ['남자_매니저_대화', '여자_매니저_대화', '여자_매니저_소개', '추가_서비스_규칙']
+  const validCategories: Category[] = ['남자_매니저_대화', '여자_매니저_대화', '여자_매니저_소개', '추가_서비스_규칙', '개인_피드백']
   const initialCategory = (urlCategory && validCategories.includes(urlCategory)) ? urlCategory : '남자_매니저_대화'
   const [formData, setFormData] = useState({
     title: '',

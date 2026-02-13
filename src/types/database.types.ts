@@ -53,7 +53,7 @@ export interface Database {
           title: string;
           content_type: 'video' | 'document';
           content: string;
-          category: '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개' | '추가_서비스_규칙';
+          category: '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개' | '추가_서비스_규칙' | '개인_피드백';
           sub_category: string | null;
           external_link: string | null;
           targeting_type: 'group' | 'individual';
@@ -67,7 +67,7 @@ export interface Database {
           title: string;
           content_type: 'video' | 'document';
           content: string;
-          category: '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개' | '추가_서비스_규칙';
+          category: '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개' | '추가_서비스_규칙' | '개인_피드백';
           sub_category?: string | null;
           external_link?: string | null;
           targeting_type?: 'group' | 'individual';
@@ -81,7 +81,7 @@ export interface Database {
           title?: string;
           content_type?: 'video' | 'document';
           content?: string;
-          category?: '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개' | '추가_서비스_규칙';
+          category?: '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개' | '추가_서비스_규칙' | '개인_피드백';
           sub_category?: string | null;
           external_link?: string | null;
           targeting_type?: 'group' | 'individual';

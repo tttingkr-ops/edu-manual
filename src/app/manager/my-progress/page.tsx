@@ -58,7 +58,7 @@ export default async function MyProgressPage() {
   }))
 
   // 카테고리별 통계 계산
-  const categories = ['남자_매니저_대화', '여자_매니저_대화', '여자_매니저_소개', '추가_서비스_규칙']
+  const categories = ['남자_매니저_대화', '여자_매니저_대화', '여자_매니저_소개', '추가_서비스_규칙', '개인_피드백']
   const categoryStats = categories.map((category) => {
     const categoryPosts = postsWithReadStatus.filter((p: PostWithReadStatus) => p.category === category)
     const readCount = categoryPosts.filter((p: PostWithReadStatus) => p.isRead).length

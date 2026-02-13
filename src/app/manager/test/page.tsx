@@ -33,6 +33,13 @@ const CATEGORIES = [
     icon: '📋',
     color: 'bg-orange-500',
   },
+  {
+    id: '개인_피드백',
+    title: '개인 피드백',
+    description: '개인별 피드백 및 맞춤형 교육 테스트',
+    icon: '💬',
+    color: 'bg-teal-500',
+  },
 ]
 
 export default async function TestListPage() {

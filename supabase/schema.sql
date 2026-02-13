@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS public.educational_posts (
     title TEXT NOT NULL,
     content_type TEXT NOT NULL CHECK (content_type IN ('video', 'document')),
     content TEXT NOT NULL,
-    category TEXT NOT NULL CHECK (category IN ('남자_매니저_대화', '여자_매니저_대화', '여자_매니저_소개', '추가_서비스_규칙')),
+    category TEXT NOT NULL CHECK (category IN ('남자_매니저_대화', '여자_매니저_대화', '여자_매니저_소개', '추가_서비스_규칙', '개인_피드백')),
     images JSONB DEFAULT '[]'::jsonb, -- 첨부 이미지 URL 배열
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

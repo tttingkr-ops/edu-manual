@@ -21,6 +21,7 @@ const sanitizeFolderPath = (path: string): string => {
     '여자_매니저_대화': 'female_manager_chat',
     '여자_매니저_소개': 'female_manager_intro',
     '추가_서비스_규칙': 'additional_service_rules',
+    '개인_피드백': 'personal_feedback',
   }
 
   let sanitized = path
