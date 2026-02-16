@@ -3,8 +3,9 @@
 // Updated: 2026-02-10 - 닉네임 필드 추가, 그룹 관리 기능 추가
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { createClient } from '@/lib/supabase/client'
 import {
   createUserAction,
   updateUserAction,
@@ -76,6 +77,23 @@ export default function UsersContent({
   const [showGroupAssignModal, setShowGroupAssignModal] = useState(false)
   const [selectedUserForGroups, setSelectedUserForGroups] = useState<User | null>(null)
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([])
+
+  // 재테스트 할당 상태
+  const [showRetestModal, setShowRetestModal] = useState(false)
+  const [retestUser, setRetestUser] = useState<User | null>(null)
+  const [retestCategory, setRetestCategory] = useState<string>('')
+  const [retestReason, setRetestReason] = useState<string>('')
+  const [adminId, setAdminId] = useState<string>('')
+  const supabase = createClient()
+
+  // 현재 관리자 ID 가져오기
+  useEffect(() => {
+    const getAdminId = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) setAdminId(user.id)
+    }
+    getAdminId()
+  }, [])
 
   // 필터링된 사용자 목록
   const filteredUsers = users.filter((user) => {
@@ -432,6 +450,63 @@ export default function UsersContent({
     )
   }
 
+  // 재테스트 할당 모달
+  const openRetestModal = (user: User) => {
+    setRetestUser(user)
+    setRetestCategory('')
+    setRetestReason('')
+    setError(null)
+    setShowRetestModal(true)
+  }
+
+  const closeRetestModal = () => {
+    setShowRetestModal(false)
+    setRetestUser(null)
+    setRetestCategory('')
+    setRetestReason('')
+    setError(null)
+  }
+
+  const handleRetestSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!retestUser || !adminId) return
+
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const { error: insertError } = await supabase
+        .from('retest_assignments')
+        .insert({
+          admin_id: adminId,
+          manager_id: retestUser.id,
+          category: retestCategory || null,
+          question_ids: null,
+          reason: retestReason || null,
+          status: 'pending',
+        })
+
+      if (insertError) throw insertError
+
+      alert(`${retestUser.username}님에게 재테스트가 할당되었습니다.`)
+      closeRetestModal()
+    } catch (err: any) {
+      console.error('Error assigning retest:', err)
+      setError(err.message || '재테스트 할당 중 오류가 발생했습니다.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const RETEST_CATEGORIES = [
+    { value: '', label: '전체 (모든 카테고리)' },
+    { value: '남자_매니저_대화', label: '남자 매니저 대화' },
+    { value: '여자_매니저_대화', label: '여자 매니저 대화' },
+    { value: '여자_매니저_소개', label: '여자 매니저 소개' },
+    { value: '추가_서비스_규칙', label: '추가 서비스 규칙' },
+    { value: '개인_피드백', label: '개인 피드백' },
+  ]
+
   // 사용자의 그룹 이름 목록 가져오기
   const getUserGroupNames = (userId: string): string[] => {
     const gids = userGroups.filter((ug) => ug.user_id === userId).map((ug) => ug.group_id)
@@ -671,6 +746,18 @@ export default function UsersContent({
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <div className="flex items-center justify-end gap-2">
+                        {user.role === 'manager' && (
+                          <button
+                            onClick={() => openRetestModal(user)}
+                            disabled={isLoading}
+                            className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                            title="재테스트 할당"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                          </button>
+                        )}
                         {user.role === 'manager' && (
                           <button
                             onClick={() => openGroupAssignModal(user)}
@@ -1078,6 +1165,78 @@ export default function UsersContent({
                   className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
                 >
                   {isLoading ? '저장 중...' : editingGroup ? '수정' : '추가'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 재테스트 할당 모달 */}
+      {showRetestModal && retestUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">재테스트 할당</h2>
+              <button onClick={closeRetestModal} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleRetestSubmit} className="p-6 space-y-4">
+              {error && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-600">{error}</p>
+                </div>
+              )}
+
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-700">
+                  <strong>{retestUser.username}</strong>님에게 재테스트를 할당합니다.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">카테고리</label>
+                <select
+                  value={retestCategory}
+                  onChange={(e) => setRetestCategory(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                >
+                  {RETEST_CATEGORIES.map((cat) => (
+                    <option key={cat.value} value={cat.value}>{cat.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">사유</label>
+                <textarea
+                  value={retestReason}
+                  onChange={(e) => setRetestReason(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  rows={3}
+                  placeholder="재테스트 사유를 입력하세요 (선택)"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={closeRetestModal}
+                  disabled={isLoading}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                >
+                  {isLoading ? '할당 중...' : '재테스트 할당'}
                 </button>
               </div>
             </form>

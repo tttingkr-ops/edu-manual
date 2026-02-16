@@ -89,6 +89,36 @@ export default async function TestListPage() {
     .order('test_date', { ascending: false })
     .limit(5)
 
+  // 나에게 타겟된 게시물의 테스트 문제 조회 (Feature 4)
+  const { data: targetedPosts } = await supabase
+    .from('post_target_users')
+    .select('post_id, educational_posts(id, title, test_visibility, category)')
+    .eq('user_id', user?.id || '')
+
+  const targetedQuestionCount = await (async () => {
+    const targetedPostIds = (targetedPosts || [])
+      .filter((tp: any) => tp.educational_posts?.test_visibility === 'targeted')
+      .map((tp: any) => tp.post_id)
+    if (targetedPostIds.length === 0) return 0
+    const { count } = await supabase
+      .from('test_questions')
+      .select('id', { count: 'exact', head: true })
+      .in('related_post_id', targetedPostIds)
+    return count || 0
+  })()
+
+  // 할당된 재테스트 조회 (Feature 3)
+  const { data: retestAssignments } = await supabase
+    .from('retest_assignments')
+    .select('*')
+    .eq('manager_id', user?.id || '')
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false })
+
+  // 최근 테스트 오답 여부 확인 (Feature 1) - 가장 최근 결과에서 오답이 있는지
+  const latestResult = recentResults?.[0]
+  const hasWrongAnswers = latestResult && latestResult.correct_count < latestResult.total_count
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* 페이지 헤더 */}
@@ -98,6 +128,97 @@ export default async function TestListPage() {
           교육 내용을 얼마나 이해했는지 테스트해보세요.
         </p>
       </div>
+
+      {/* 할당된 재테스트 (Feature 3) */}
+      {retestAssignments && retestAssignments.length > 0 && (
+        <div className="mb-8 bg-red-50 rounded-xl border border-red-200 p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <h2 className="text-lg font-semibold text-red-800">할당된 재테스트</h2>
+            <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+              {retestAssignments.length}
+            </span>
+          </div>
+          <div className="space-y-3">
+            {retestAssignments.map((assignment: any) => (
+              <Link
+                key={assignment.id}
+                href={`/manager/test/${encodeURIComponent(assignment.category || '전체')}?retestId=${assignment.id}`}
+                className="block p-4 bg-white rounded-lg border border-red-200 hover:shadow-md transition-shadow"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      {assignment.category ? assignment.category.replace(/_/g, ' ') : '전체'} 재테스트
+                    </p>
+                    {assignment.reason && (
+                      <p className="text-sm text-gray-500 mt-1">사유: {assignment.reason}</p>
+                    )}
+                    <p className="text-xs text-gray-400 mt-1">
+                      {new Date(assignment.created_at).toLocaleDateString('ko-KR')}
+                    </p>
+                  </div>
+                  <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 나에게 할당된 문제 (Feature 4) */}
+      {targetedQuestionCount > 0 && (
+        <div className="mb-8">
+          <Link
+            href="/manager/test/내_할당_문제"
+            className="block bg-gradient-to-r from-teal-500 to-teal-600 rounded-xl p-6 text-white hover:from-teal-600 hover:to-teal-700 transition-all shadow-lg hover:shadow-xl"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold mb-2">나에게 할당된 문제</h2>
+                <p className="text-teal-100">
+                  개인 피드백으로 할당된 문제를 풀어보세요.
+                </p>
+              </div>
+              <div className="text-4xl">🎯</div>
+            </div>
+            <div className="mt-4 flex items-center gap-4 text-sm">
+              <span className="bg-white/20 px-3 py-1 rounded-full">
+                {targetedQuestionCount}문제
+              </span>
+            </div>
+          </Link>
+        </div>
+      )}
+
+      {/* 오답 복습 바로가기 (Feature 1) */}
+      {hasWrongAnswers && latestResult && (
+        <div className="mb-8">
+          <Link
+            href={`/manager/test/review?resultId=${latestResult.id}`}
+            className="block bg-gradient-to-r from-amber-500 to-amber-600 rounded-xl p-6 text-white hover:from-amber-600 hover:to-amber-700 transition-all shadow-lg hover:shadow-xl"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold mb-2">오답 복습</h2>
+                <p className="text-amber-100">
+                  최근 테스트에서 틀린 문제를 다시 풀어보세요.
+                </p>
+              </div>
+              <div className="text-4xl">📖</div>
+            </div>
+            <div className="mt-4 flex items-center gap-4 text-sm">
+              <span className="bg-white/20 px-3 py-1 rounded-full">
+                {latestResult.total_count - latestResult.correct_count}문제 오답
+              </span>
+              <span className="bg-white/20 px-3 py-1 rounded-full">
+                {latestResult.category === '전체' ? '전체 테스트' : latestResult.category.replace(/_/g, ' ')}
+              </span>
+            </div>
+          </Link>
+        </div>
+      )}
 
       {/* 전체 테스트 */}
       <div className="mb-8">
@@ -174,9 +295,10 @@ export default async function TestListPage() {
         {recentResults && recentResults.length > 0 ? (
           <div className="space-y-3">
             {recentResults.map((result: any) => (
-              <div
+              <Link
                 key={result.id}
-                className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+                href={`/manager/test/results/${result.id}`}
+                className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
               >
                 <div>
                   <p className="font-medium text-gray-900">
@@ -190,23 +312,28 @@ export default async function TestListPage() {
                     })}
                   </p>
                 </div>
-                <div className="text-right">
-                  <p
-                    className={`text-xl font-bold ${
-                      result.score >= 80
-                        ? 'text-green-600'
-                        : result.score >= 60
-                        ? 'text-yellow-600'
-                        : 'text-red-600'
-                    }`}
-                  >
-                    {result.score}점
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {result.correct_count}/{result.total_count} 정답
-                  </p>
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <p
+                      className={`text-xl font-bold ${
+                        result.score >= 80
+                          ? 'text-green-600'
+                          : result.score >= 60
+                          ? 'text-yellow-600'
+                          : 'text-red-600'
+                      }`}
+                    >
+                      {result.score}점
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {result.correct_count}/{result.total_count} 정답
+                    </p>
+                  </div>
+                  <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         ) : (

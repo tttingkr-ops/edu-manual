@@ -39,7 +39,8 @@ export default function ReviewClient({ answers: initialAnswers, adminId }: Revie
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [adminScore, setAdminScore] = useState<number>(0)
-  const [adminFeedback, setAdminFeedback] = useState<string>('')
+  const [adminStrengths, setAdminStrengths] = useState<string>('')
+  const [adminImprovements, setAdminImprovements] = useState<string>('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleExpand = (answerId: string) => {
@@ -51,7 +52,8 @@ export default function ReviewClient({ answers: initialAnswers, adminId }: Revie
       const answer = answers.find(a => a.id === answerId)
       if (answer) {
         setAdminScore(answer.ai_score || 0)
-        setAdminFeedback('')
+        setAdminStrengths('')
+        setAdminImprovements('')
       }
     }
   }
@@ -59,7 +61,8 @@ export default function ReviewClient({ answers: initialAnswers, adminId }: Revie
   const handleStartEdit = (answer: Answer) => {
     setEditingId(answer.id)
     setAdminScore(answer.ai_score || 0)
-    setAdminFeedback('')
+    setAdminStrengths('')
+    setAdminImprovements('')
   }
 
   const handleApproveAiScore = async (answer: Answer) => {
@@ -70,7 +73,7 @@ export default function ReviewClient({ answers: initialAnswers, adminId }: Revie
         .from('subjective_answers')
         .update({
           admin_score: answer.ai_score,
-          admin_feedback: 'AI 채점 승인',
+          admin_feedback: JSON.stringify({ strengths: '', improvements: '', note: 'AI 채점 승인' }),
           admin_reviewed_at: new Date().toISOString(),
           admin_reviewer_id: adminId,
           final_score: answer.ai_score,
@@ -104,7 +107,7 @@ export default function ReviewClient({ answers: initialAnswers, adminId }: Revie
         .from('subjective_answers')
         .update({
           admin_score: adminScore,
-          admin_feedback: adminFeedback || null,
+          admin_feedback: JSON.stringify({ strengths: adminStrengths, improvements: adminImprovements }) || null,
           admin_reviewed_at: new Date().toISOString(),
           admin_reviewer_id: adminId,
           final_score: adminScore,
@@ -319,14 +322,27 @@ export default function ReviewClient({ answers: initialAnswers, adminId }: Revie
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        관리자 피드백 (선택)
+                        잘한 점
                       </label>
                       <textarea
-                        value={adminFeedback}
-                        onChange={(e) => setAdminFeedback(e.target.value)}
+                        value={adminStrengths}
+                        onChange={(e) => setAdminStrengths(e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                        rows={3}
-                        placeholder="추가 피드백이 있다면 입력하세요..."
+                        rows={2}
+                        placeholder="잘한 점을 입력하세요..."
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        보완할 점
+                      </label>
+                      <textarea
+                        value={adminImprovements}
+                        onChange={(e) => setAdminImprovements(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                        rows={2}
+                        placeholder="보완할 점을 입력하세요..."
                       />
                     </div>
 

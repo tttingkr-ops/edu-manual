@@ -61,6 +61,7 @@ export interface Database {
           updated_at: string;
           author_id: string;
           images: Json;
+          test_visibility: 'all' | 'targeted';
         };
         Insert: {
           id?: string;
@@ -75,6 +76,7 @@ export interface Database {
           updated_at?: string;
           author_id: string;
           images?: Json;
+          test_visibility?: 'all' | 'targeted';
         };
         Update: {
           id?: string;
@@ -89,6 +91,7 @@ export interface Database {
           updated_at?: string;
           author_id?: string;
           images?: Json;
+          test_visibility?: 'all' | 'targeted';
         };
         Relationships: [
           {
@@ -640,6 +643,107 @@ export interface Database {
           {
             foreignKeyName: 'education_comments_author_id_fkey';
             columns: ['author_id'];
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+      wrong_answer_reviews: {
+        Row: {
+          id: string;
+          user_id: string;
+          test_result_id: string;
+          question_id: string;
+          original_answer: Json | null;
+          review_answer: Json | null;
+          is_correct_on_review: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          test_result_id: string;
+          question_id: string;
+          original_answer?: Json | null;
+          review_answer?: Json | null;
+          is_correct_on_review?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          test_result_id?: string;
+          question_id?: string;
+          original_answer?: Json | null;
+          review_answer?: Json | null;
+          is_correct_on_review?: boolean;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'wrong_answer_reviews_user_id_fkey';
+            columns: ['user_id'];
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'wrong_answer_reviews_test_result_id_fkey';
+            columns: ['test_result_id'];
+            referencedRelation: 'test_results';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'wrong_answer_reviews_question_id_fkey';
+            columns: ['question_id'];
+            referencedRelation: 'test_questions';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+      retest_assignments: {
+        Row: {
+          id: string;
+          admin_id: string;
+          manager_id: string;
+          category: string | null;
+          question_ids: Json | null;
+          reason: string | null;
+          status: 'pending' | 'completed';
+          created_at: string;
+          completed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          admin_id: string;
+          manager_id: string;
+          category?: string | null;
+          question_ids?: Json | null;
+          reason?: string | null;
+          status?: 'pending' | 'completed';
+          created_at?: string;
+          completed_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          admin_id?: string;
+          manager_id?: string;
+          category?: string | null;
+          question_ids?: Json | null;
+          reason?: string | null;
+          status?: 'pending' | 'completed';
+          created_at?: string;
+          completed_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'retest_assignments_admin_id_fkey';
+            columns: ['admin_id'];
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'retest_assignments_manager_id_fkey';
+            columns: ['manager_id'];
             referencedRelation: 'users';
             referencedColumns: ['id'];
           }

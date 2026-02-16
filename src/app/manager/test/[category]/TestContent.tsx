@@ -52,6 +52,7 @@ interface TestContentProps {
   category: string
   categoryTitle: string
   userId: string
+  retestInfo?: { id: string; reason: string | null; category: string | null } | null
 }
 
 export default function TestContent({
@@ -59,6 +60,7 @@ export default function TestContent({
   category,
   categoryTitle,
   userId,
+  retestInfo,
 }: TestContentProps) {
   const router = useRouter()
   const supabase = createClient()
@@ -73,6 +75,7 @@ export default function TestContent({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [gradingErrors, setGradingErrors] = useState<Record<string, string>>({})
+  const [savedResultId, setSavedResultId] = useState<string | null>(null)
 
   const currentQuestion = questions[currentIndex]
   const isMultipleChoice = currentQuestion?.question_type === 'multiple_choice'
@@ -209,7 +212,7 @@ export default function TestContent({
 
     try {
       // DB에 결과 저장
-      const { error } = await supabase.from('test_results').insert({
+      const { data: resultData, error } = await supabase.from('test_results').insert({
         user_id: userId,
         category: category,
         score: score,
@@ -217,11 +220,24 @@ export default function TestContent({
         total_count: questions.length,
         category_scores: {},
         test_date: new Date().toISOString(),
-      })
+      }).select('id').single()
 
       if (error) {
         console.error('Error saving test result:', error)
         setSaveError('결과 저장 중 오류가 발생했습니다.')
+      } else if (resultData) {
+        setSavedResultId(resultData.id)
+      }
+
+      // 재테스트인 경우 완료 처리
+      if (retestInfo) {
+        await supabase
+          .from('retest_assignments')
+          .update({
+            status: 'completed',
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', retestInfo.id)
       }
     } catch (err) {
       console.error('Error saving test result:', err)
@@ -311,7 +327,7 @@ export default function TestContent({
             총 {maxTotalScore}점 중 {totalScore}점 획득 ({correctCount}/{questions.length} 문제)
           </p>
 
-          <div className="mt-6 flex items-center justify-center gap-4">
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-4">
             <Link
               href="/manager/test"
               className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
@@ -326,11 +342,20 @@ export default function TestContent({
                 setSubjectiveAnswers({})
                 setGradingResults({})
                 setIsSubmitting(false)
+                setSavedResultId(null)
               }}
               className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
             >
               다시 풀기
             </button>
+            {wrongAnswers.length > 0 && savedResultId && (
+              <Link
+                href={`/manager/test/review?resultId=${savedResultId}`}
+                className="px-6 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors"
+              >
+                오답 복습
+              </Link>
+            )}
           </div>
         </div>
 
@@ -453,6 +478,19 @@ export default function TestContent({
         </Link>
         <div className="text-sm text-gray-500">{categoryTitle}</div>
       </div>
+
+      {/* 재테스트 배지 */}
+      {retestInfo && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="px-2 py-1 bg-red-500 text-white text-xs font-bold rounded-full">재테스트</span>
+            <span className="text-sm font-medium text-red-800">관리자가 할당한 재테스트입니다</span>
+          </div>
+          {retestInfo.reason && (
+            <p className="text-sm text-red-700 mt-1">사유: {retestInfo.reason}</p>
+          )}
+        </div>
+      )}
 
       {/* 진행률 */}
       <div className="mb-6">

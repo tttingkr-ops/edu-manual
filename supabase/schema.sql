@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS public.educational_posts (
     content TEXT NOT NULL,
     category TEXT NOT NULL CHECK (category IN ('남자_매니저_대화', '여자_매니저_대화', '여자_매니저_소개', '추가_서비스_규칙', '개인_피드백')),
     images JSONB DEFAULT '[]'::jsonb, -- 첨부 이미지 URL 배열
+    test_visibility TEXT NOT NULL DEFAULT 'all' CHECK (test_visibility IN ('all', 'targeted')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     author_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE
@@ -152,6 +153,43 @@ CREATE INDEX IF NOT EXISTS idx_subjective_answers_user_id ON public.subjective_a
 CREATE INDEX IF NOT EXISTS idx_subjective_answers_status ON public.subjective_answers(status);
 CREATE INDEX IF NOT EXISTS idx_subjective_answers_created_at ON public.subjective_answers(created_at DESC);
 
+-- ============================================
+-- 8. WRONG_ANSWER_REVIEWS 테이블 (오답 복습 기록)
+-- ============================================
+CREATE TABLE IF NOT EXISTS public.wrong_answer_reviews (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    test_result_id UUID NOT NULL REFERENCES public.test_results(id) ON DELETE CASCADE,
+    question_id UUID NOT NULL REFERENCES public.test_questions(id) ON DELETE CASCADE,
+    original_answer JSONB,
+    review_answer JSONB,
+    is_correct_on_review BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- wrong_answer_reviews 테이블 인덱스
+CREATE INDEX IF NOT EXISTS idx_wrong_answer_reviews_user_id ON public.wrong_answer_reviews(user_id);
+CREATE INDEX IF NOT EXISTS idx_wrong_answer_reviews_test_result_id ON public.wrong_answer_reviews(test_result_id);
+
+-- ============================================
+-- 9. RETEST_ASSIGNMENTS 테이블 (관리자 재시험 배정)
+-- ============================================
+CREATE TABLE IF NOT EXISTS public.retest_assignments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    admin_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    manager_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    category TEXT,
+    question_ids JSONB,
+    reason TEXT,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    completed_at TIMESTAMP WITH TIME ZONE
+);
+
+-- retest_assignments 테이블 인덱스
+CREATE INDEX IF NOT EXISTS idx_retest_assignments_manager_id ON public.retest_assignments(manager_id);
+CREATE INDEX IF NOT EXISTS idx_retest_assignments_status ON public.retest_assignments(status);
+
 
 -- ============================================
 -- ROW LEVEL SECURITY (RLS) 정책
@@ -165,6 +203,8 @@ ALTER TABLE public.read_status ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.test_questions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.test_results ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.subjective_answers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.wrong_answer_reviews ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.retest_assignments ENABLE ROW LEVEL SECURITY;
 
 -- --------------------------------------------
 -- USERS 테이블 RLS 정책
@@ -372,6 +412,52 @@ CREATE POLICY "subjective_answers_update_own_or_admin" ON public.subjective_answ
             WHERE id = auth.uid() AND role = 'admin'
         )
     );
+
+-- --------------------------------------------
+-- WRONG_ANSWER_REVIEWS 테이블 RLS 정책
+-- 본인 것만 읽기/생성, 관리자는 모두 읽기
+-- --------------------------------------------
+CREATE POLICY "wrong_answer_reviews_select_own_or_admin" ON public.wrong_answer_reviews
+    FOR SELECT
+    USING (
+        auth.uid() = user_id
+        OR EXISTS (
+            SELECT 1 FROM public.users
+            WHERE id = auth.uid() AND role = 'admin'
+        )
+    );
+
+CREATE POLICY "wrong_answer_reviews_insert_own" ON public.wrong_answer_reviews
+    FOR INSERT
+    WITH CHECK (auth.uid() = user_id);
+
+-- --------------------------------------------
+-- RETEST_ASSIGNMENTS 테이블 RLS 정책
+-- 관리자는 모든 작업, 매니저는 본인 것만 읽기/수정
+-- --------------------------------------------
+CREATE POLICY "retest_assignments_all_admin" ON public.retest_assignments
+    FOR ALL
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.users
+            WHERE id = auth.uid() AND role = 'admin'
+        )
+    )
+    WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM public.users
+            WHERE id = auth.uid() AND role = 'admin'
+        )
+    );
+
+CREATE POLICY "retest_assignments_select_own_manager" ON public.retest_assignments
+    FOR SELECT
+    USING (auth.uid() = manager_id);
+
+CREATE POLICY "retest_assignments_update_own_manager" ON public.retest_assignments
+    FOR UPDATE
+    USING (auth.uid() = manager_id)
+    WITH CHECK (auth.uid() = manager_id);
 
 
 -- ============================================

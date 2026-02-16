@@ -43,6 +43,7 @@ export default function NewPostPage() {
   const [managers, setManagers] = useState<{id: string; username: string; nickname: string | null}[]>([])
   const [selectedManagers, setSelectedManagers] = useState<string[]>([])
   const [managerSearch, setManagerSearch] = useState('')
+  const [testVisibility, setTestVisibility] = useState<'all' | 'targeted'>('all')
   const [includeTest, setIncludeTest] = useState(false)
   const [questions, setQuestions] = useState<QuestionData[]>([])
   const [uploadedImages, setUploadedImages] = useState<string[]>([])
@@ -199,6 +200,7 @@ export default function NewPostPage() {
           external_link: externalLink.trim() || null,
           author_id: user.id,
           targeting_type: targetingType,
+          test_visibility: (targetingType === 'individual' && includeTest) ? testVisibility : 'all',
         })
         .select()
         .single()
@@ -741,6 +743,43 @@ export default function NewPostPage() {
               <span className="text-sm font-medium text-gray-700">테스트 추가</span>
             </label>
           </div>
+
+          {includeTest && targetingType === 'individual' && (
+            <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                테스트 공개 범위
+              </label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="test_visibility"
+                    value="all"
+                    checked={testVisibility === 'all'}
+                    onChange={() => setTestVisibility('all')}
+                    className="w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
+                  />
+                  <span className="text-sm text-gray-700">전체 공개</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="test_visibility"
+                    value="targeted"
+                    checked={testVisibility === 'targeted'}
+                    onChange={() => setTestVisibility('targeted')}
+                    className="w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
+                  />
+                  <span className="text-sm text-gray-700">대상자만</span>
+                </label>
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                {testVisibility === 'all'
+                  ? '연결된 테스트 문제가 모든 매니저에게 공개됩니다.'
+                  : '연결된 테스트 문제가 지정된 매니저에게만 노출됩니다.'}
+              </p>
+            </div>
+          )}
 
           {includeTest && (
             <QuestionBuilder
