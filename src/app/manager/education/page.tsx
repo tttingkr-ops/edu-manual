@@ -84,6 +84,11 @@ export default async function EducationPage() {
   const filteredPosts = isAdmin
     ? (posts || [])
     : (posts || []).filter((post: any) => {
+        // 승인 대기 중인 게시물: 본인이 작성한 것만 표시
+        if (post.approval_status === 'pending') {
+          return post.author_id === user.id
+        }
+
         if (post.targeting_type === 'individual') {
           return individuallyTargetedPostIds.has(post.id)
         }
@@ -115,5 +120,5 @@ export default async function EducationPage() {
           : null
       })()
 
-  return <EducationContent posts={postsWithReadStatus} subCategories={subCategories || []} allowedCategories={allowedCategories} userRole={userRole} />
+  return <EducationContent posts={postsWithReadStatus} subCategories={subCategories || []} allowedCategories={allowedCategories} userRole={userRole} userId={user.id} />
 }

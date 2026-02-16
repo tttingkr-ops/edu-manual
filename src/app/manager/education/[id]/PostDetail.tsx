@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { createClient } from '@/lib/supabase/client'
 
 interface Post {
@@ -358,7 +359,20 @@ export default function PostDetail({
           ) : (
             // 문서 콘텐츠 (마크다운)
             <div className="markdown-content prose prose-gray max-w-none">
-              <ReactMarkdown>{post.content}</ReactMarkdown>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  img: ({ node, ...props }) => (
+                    <img
+                      {...props}
+                      style={{ maxWidth: '100%', height: 'auto', borderRadius: '0.5rem' }}
+                      loading="lazy"
+                    />
+                  ),
+                }}
+              >
+                {post.content}
+              </ReactMarkdown>
             </div>
           )}
         </div>

@@ -111,7 +111,7 @@ export default function NewMeetingPage() {
           .from('meeting_posts')
           .insert({
             ...commonFields,
-            content: null,
+            content: content.trim() || null,
             post_type: 'poll',
             is_anonymous: isAnonymous,
             allow_multiple: allowMultiple,
@@ -348,9 +348,22 @@ export default function NewMeetingPage() {
           </div>
         )}
 
-        {/* 투표: 옵션 설정 */}
+        {/* 투표: 설명 + 옵션 설정 */}
         {postType === 'poll' && (
           <div className="mb-6 space-y-6">
+            {/* 투표 설명 (선택사항) */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                투표 설명 <span className="text-gray-400 text-xs font-normal">(선택사항)</span>
+              </label>
+              <MarkdownEditor
+                value={content}
+                onChange={setContent}
+                placeholder="투표에 대한 설명, 참고 이미지 등을 추가하세요..."
+                rows={6}
+              />
+            </div>
+
             {/* 투표 항목 */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-3">

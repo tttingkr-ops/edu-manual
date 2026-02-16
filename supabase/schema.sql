@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS public.educational_posts (
     category TEXT NOT NULL CHECK (category IN ('남자_매니저_대화', '여자_매니저_대화', '여자_매니저_소개', '추가_서비스_규칙', '개인_피드백')),
     images JSONB DEFAULT '[]'::jsonb, -- 첨부 이미지 URL 배열
     test_visibility TEXT NOT NULL DEFAULT 'all' CHECK (test_visibility IN ('all', 'targeted')),
+    approval_status TEXT NOT NULL DEFAULT 'approved' CHECK (approval_status IN ('approved', 'pending')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     author_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE

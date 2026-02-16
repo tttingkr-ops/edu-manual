@@ -114,7 +114,7 @@ export default function ManagerNewPostPage() {
         throw new Error('로그인이 필요합니다.')
       }
 
-      // 게시물 저장 (targeting_type = 'group', 그룹 미지정 → 모든 사용자 열람 가능)
+      // 게시물 저장 (매니저 작성 → pending, 관리자 승인 후 게시)
       const { error: insertError } = await supabase
         .from('educational_posts')
         .insert({
@@ -126,10 +126,12 @@ export default function ManagerNewPostPage() {
           external_link: externalLink.trim() || null,
           author_id: user.id,
           targeting_type: 'group',
+          approval_status: 'pending',
         })
 
       if (insertError) throw insertError
 
+      alert('게시글이 관리자 승인 대기 상태로 등록되었습니다.')
       router.push('/manager/education')
     } catch (err: any) {
       console.error('Error creating post:', err)
@@ -151,7 +153,7 @@ export default function ManagerNewPostPage() {
         </div>
         <h1 className="text-2xl font-bold text-gray-900">새 교육 자료 등록</h1>
         <p className="mt-1 text-gray-600">
-          교육 자료를 등록합니다. 등록된 자료는 모든 사용자가 열람할 수 있습니다.
+          교육 자료를 등록합니다. 관리자 승인 후 게시됩니다.
         </p>
       </div>
 

@@ -62,6 +62,7 @@ export interface Database {
           author_id: string;
           images: Json;
           test_visibility: 'all' | 'targeted';
+          approval_status: 'approved' | 'pending';
         };
         Insert: {
           id?: string;
@@ -77,6 +78,7 @@ export interface Database {
           author_id: string;
           images?: Json;
           test_visibility?: 'all' | 'targeted';
+          approval_status?: 'approved' | 'pending';
         };
         Update: {
           id?: string;
@@ -92,6 +94,7 @@ export interface Database {
           author_id?: string;
           images?: Json;
           test_visibility?: 'all' | 'targeted';
+          approval_status?: 'approved' | 'pending';
         };
         Relationships: [
           {

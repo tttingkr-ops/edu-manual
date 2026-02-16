@@ -10,6 +10,7 @@ interface PostCardProps {
   category: string
   createdAt: string
   isRead: boolean
+  approvalStatus?: 'approved' | 'pending'
 }
 
 export default function PostCard({
@@ -19,6 +20,7 @@ export default function PostCard({
   category,
   createdAt,
   isRead,
+  approvalStatus,
 }: PostCardProps) {
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
@@ -50,7 +52,12 @@ export default function PostCard({
         }`}
       >
         {/* 읽음 상태 뱃지 */}
-        <div className="absolute top-4 right-4">
+        <div className="absolute top-4 right-4 flex items-center gap-1.5">
+          {approvalStatus === 'pending' && (
+            <span className="px-2.5 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">
+              승인 대기중
+            </span>
+          )}
           {isRead ? (
             <span className="px-2.5 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-full">
               읽음

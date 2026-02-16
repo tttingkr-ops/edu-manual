@@ -17,6 +17,7 @@ interface Post {
   updated_at: string
   author_id: string
   isRead: boolean
+  approval_status?: 'approved' | 'pending'
 }
 
 interface SubCategory {
@@ -31,6 +32,7 @@ interface EducationContentProps {
   subCategories: SubCategory[]
   allowedCategories: string[] | null // null = 모든 카테고리 접근 가능
   userRole: string
+  userId?: string
 }
 
 const ALL_CATEGORIES = [
@@ -41,7 +43,7 @@ const ALL_CATEGORIES = [
   { id: '개인_피드백', label: '개인 피드백' },
 ]
 
-export default function EducationContent({ posts, subCategories, allowedCategories, userRole }: EducationContentProps) {
+export default function EducationContent({ posts, subCategories, allowedCategories, userRole, userId }: EducationContentProps) {
   // 허용된 카테고리만 필터링
   const CATEGORIES = allowedCategories
     ? ALL_CATEGORIES.filter(c => allowedCategories.includes(c.id))
@@ -218,6 +220,7 @@ export default function EducationContent({ posts, subCategories, allowedCategori
               category={post.category}
               createdAt={post.created_at}
               isRead={post.isRead}
+              approvalStatus={post.approval_status}
             />
           ))
         )}

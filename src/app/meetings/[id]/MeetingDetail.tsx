@@ -439,6 +439,26 @@ export default function MeetingDetail({
             </div>
           )}
 
+          {/* 투표: 설명 + 투표 UI */}
+          {post.post_type === 'poll' && post.content && (
+            <div className="mb-6 prose prose-sm max-w-none">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  img: ({ node, ...props }) => (
+                    <img
+                      {...props}
+                      style={{ maxWidth: '100%', height: 'auto', borderRadius: '0.5rem' }}
+                      loading="lazy"
+                    />
+                  ),
+                }}
+              >
+                {post.content}
+              </ReactMarkdown>
+            </div>
+          )}
+
           {/* 투표: 투표 UI */}
           {post.post_type === 'poll' && (
             <div>

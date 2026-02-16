@@ -86,3 +86,10 @@ body {
 .markdown-content blockquote {
   @apply border-l-4 border-gray-300 pl-4 italic my-4;
 }
+
+.markdown-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  margin: 1rem 0;
+}

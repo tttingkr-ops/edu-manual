@@ -18,12 +18,14 @@ export default async function AdminDashboard() {
   const [
     { count: userCount },
     { count: postCount },
+    { count: pendingCount },
     { data: recentTests },
     { data: managers },
     { data: readingProgress },
   ] = await Promise.all([
     supabase.from('users').select('*', { count: 'exact', head: true }),
     supabase.from('educational_posts').select('*', { count: 'exact', head: true }),
+    supabase.from('educational_posts').select('*', { count: 'exact', head: true }).eq('approval_status', 'pending'),
     supabase
       .from('test_results')
       .select('*, users(username)')
@@ -121,6 +123,27 @@ export default async function AdminDashboard() {
       href: '/admin/users',
       color: 'bg-purple-500',
     },
+    {
+      label: '승인 대기',
+      value: pendingCount || 0,
+      icon: (
+        <svg
+          className="w-6 h-6"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+          />
+        </svg>
+      ),
+      href: '/admin/posts/pending',
+      color: 'bg-yellow-500',
+    },
   ]
 
   return (
@@ -134,7 +157,7 @@ export default async function AdminDashboard() {
       </div>
 
       {/* 통계 카드 */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         {stats.map((stat) => (
           <Link
             key={stat.label}

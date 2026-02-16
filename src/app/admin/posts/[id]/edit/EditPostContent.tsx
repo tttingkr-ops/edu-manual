@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+import MarkdownEditor from '@/components/MarkdownEditor'
 
 type ContentType = 'video' | 'document'
 type Category = '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개' | '추가_서비스_규칙' | '개인_피드백'
@@ -32,7 +33,7 @@ interface SubCategory {
 }
 
 interface EditPostContentProps {
-  post: Post & { targeting_type?: 'group' | 'individual' }
+  post: Post & { targeting_type?: 'group' | 'individual'; approval_status?: 'approved' | 'pending' }
   initialGroups: string[]
   initialTargetUsers: string[]
 }
@@ -140,8 +141,7 @@ export default function EditPostContent({ post, initialGroups, initialTargetUser
     return m.username.toLowerCase().includes(search) || (m.nickname && m.nickname.toLowerCase().includes(search))
   })
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const savePost = async (approveAfterSave: boolean) => {
     setIsSubmitting(true)
     setError(null)
 
@@ -155,17 +155,23 @@ export default function EditPostContent({ post, initialGroups, initialTargetUser
       }
 
       // 게시물 업데이트
+      const updateData: any = {
+        title: formData.title,
+        content_type: formData.content_type,
+        content: formData.content,
+        category: formData.category,
+        sub_category: selectedSubCategory || null,
+        external_link: externalLink.trim() || null,
+        targeting_type: targetingType,
+      }
+
+      if (approveAfterSave) {
+        updateData.approval_status = 'approved'
+      }
+
       const { error: updateError } = await supabase
         .from('educational_posts')
-        .update({
-          title: formData.title,
-          content_type: formData.content_type,
-          content: formData.content,
-          category: formData.category,
-          sub_category: selectedSubCategory || null,
-          external_link: externalLink.trim() || null,
-          targeting_type: targetingType,
-        })
+        .update(updateData)
         .eq('id', post.id)
 
       if (updateError) throw updateError
@@ -191,12 +197,17 @@ export default function EditPostContent({ post, initialGroups, initialTargetUser
         if (targetError) throw targetError
       }
 
-      router.push('/admin/posts')
+      router.push(approveAfterSave ? '/admin/posts/pending' : '/admin/posts')
     } catch (err: any) {
       console.error('Error updating post:', err)
       setError(err.message || '수정 중 오류가 발생했습니다.')
       setIsSubmitting(false)
     }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    await savePost(false)
   }
 
   const handleDelete = async () => {
@@ -241,7 +252,14 @@ export default function EditPostContent({ post, initialGroups, initialTargetUser
         </div>
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">교육 자료 수정</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-gray-900">교육 자료 수정</h1>
+              {post.approval_status === 'pending' && (
+                <span className="px-3 py-1 text-sm font-medium bg-yellow-100 text-yellow-800 rounded-full">
+                  승인 대기중
+                </span>
+              )}
+            </div>
             <p className="mt-1 text-gray-600">
               게시물 ID: {post.id.substring(0, 8)}...
             </p>
@@ -665,20 +683,15 @@ export default function EditPostContent({ post, initialGroups, initialTargetUser
             </div>
           ) : (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
                 내용 (마크다운) <span className="text-red-500">*</span>
               </label>
-              <textarea
+              <MarkdownEditor
                 value={formData.content}
-                onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 font-mono text-sm"
+                onChange={(content) => setFormData({ ...formData, content })}
+                placeholder="마크다운 형식으로 내용을 입력하세요... 이미지를 드래그하거나 붙여넣어 추가하세요."
                 rows={15}
-                placeholder="마크다운 형식으로 내용을 입력하세요..."
-                required
               />
-              <p className="mt-2 text-sm text-gray-500">
-                마크다운 문법을 사용할 수 있습니다. (제목: #, 목록: -, 굵게: **텍스트**)
-              </p>
             </div>
           )}
         </div>
@@ -710,6 +723,16 @@ export default function EditPostContent({ post, initialGroups, initialTargetUser
           >
             취소
           </Link>
+          {post.approval_status === 'pending' && (
+            <button
+              type="button"
+              onClick={() => savePost(true)}
+              disabled={isSubmitting}
+              className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSubmitting ? '처리 중...' : '수정 후 승인'}
+            </button>
+          )}
           <button
             type="submit"
             disabled={isSubmitting}

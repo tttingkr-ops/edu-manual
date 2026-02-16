@@ -28,6 +28,7 @@ interface Post {
   author_id: string
   unreadCount: number
   unreadManagers: UnreadManager[]
+  approval_status?: 'approved' | 'pending'
 }
 
 interface SubCategory {
@@ -283,6 +284,17 @@ export default function PostsContent({ posts: initialPosts }: PostsContentProps)
           <h1 className="text-2xl font-bold text-gray-900">교육 게시물 관리</h1>
         </div>
         <div className="flex gap-2">
+          {posts.some(p => p.approval_status === 'pending') && (
+            <Link
+              href="/admin/posts/pending"
+              className="flex items-center gap-2 px-4 py-2 bg-yellow-100 text-yellow-800 border border-yellow-300 rounded-lg hover:bg-yellow-200 transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              승인 대기 ({posts.filter(p => p.approval_status === 'pending').length})
+            </Link>
+          )}
           <button
             onClick={() => setShowNotionModal(true)}
             className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
@@ -462,12 +474,19 @@ export default function PostsContent({ posts: initialPosts }: PostsContentProps)
 
                 {/* 제목 & 정보 */}
                 <div className="flex-1 min-w-0">
-                  <Link
-                    href={`/admin/posts/${post.id}/edit`}
-                    className="font-medium text-gray-900 truncate block hover:text-primary-600 transition-colors"
-                  >
-                    {post.title}
-                  </Link>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href={`/admin/posts/${post.id}/edit`}
+                      className="font-medium text-gray-900 truncate hover:text-primary-600 transition-colors"
+                    >
+                      {post.title}
+                    </Link>
+                    {post.approval_status === 'pending' && (
+                      <span className="flex-shrink-0 px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">
+                        승인 대기
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
                     <span>{formatDate(post.created_at)}</span>
                     <span>{post.content_type === 'video' ? '동영상' : '문서'}</span>
