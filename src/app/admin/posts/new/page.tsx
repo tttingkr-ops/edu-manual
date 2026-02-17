@@ -467,7 +467,10 @@ export default function NewPostPage() {
                     name="targeting_type"
                     value="individual"
                     checked={targetingType === 'individual'}
-                    onChange={() => setTargetingType('individual')}
+                    onChange={() => {
+                      setTargetingType('individual')
+                      setFormData(prev => ({ ...prev, category: '개인_피드백' }))
+                    }}
                     className="sr-only"
                   />
                   <div

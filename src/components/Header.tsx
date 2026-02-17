@@ -19,7 +19,7 @@ export default function Header({ userName, userRole }: HeaderProps) {
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
-    router.push('/login')
+    window.location.href = '/login'
   }
 
   const managerNavItems = [
