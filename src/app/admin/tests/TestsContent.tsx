@@ -80,7 +80,7 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
   const [showModal, setShowModal] = useState(false)
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
   const [previewQuestion, setPreviewQuestion] = useState<Question | null>(null)
-  const [previewAnswer, setPreviewAnswer] = useState<number | null>(null)
+  const [previewAnswer, setPreviewAnswer] = useState<number[]>([])
   const [previewTextAnswer, setPreviewTextAnswer] = useState('')
   const [previewSubmitted, setPreviewSubmitted] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -522,7 +522,7 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
                       <button
                         onClick={() => {
                           setPreviewQuestion(question)
-                          setPreviewAnswer(null)
+                          setPreviewAnswer([])
                           setPreviewTextAnswer('')
                           setPreviewSubmitted(false)
                         }}
@@ -580,7 +580,7 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
                     <button
                       onClick={() => {
                         setPreviewQuestion(question)
-                        setPreviewAnswer(null)
+                        setPreviewAnswer([])
                         setPreviewTextAnswer('')
                         setPreviewSubmitted(false)
                       }}
@@ -1113,8 +1113,9 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
                 {/* 객관식 선택지 */}
                 {previewQuestion.question_type === 'multiple_choice' && previewQuestion.options && (
                   <div className="space-y-3">
+                    <p className="text-xs text-gray-500 mb-1">복수 선택 가능 (해당하는 답을 모두 선택하세요)</p>
                     {previewQuestion.options.map((option, index) => {
-                      const isSelected = previewAnswer === index
+                      const isSelected = previewAnswer.includes(index)
                       const isCorrect = Array.isArray(previewQuestion.correct_answer)
                         ? previewQuestion.correct_answer.includes(index)
                         : index === (previewQuestion.correct_answer as unknown as number)
@@ -1124,7 +1125,12 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
                         <button
                           key={index}
                           onClick={() => {
-                            if (!previewSubmitted) setPreviewAnswer(index)
+                            if (!previewSubmitted) {
+                              const next = isSelected
+                                ? previewAnswer.filter(i => i !== index)
+                                : [...previewAnswer, index].sort((a, b) => a - b)
+                              setPreviewAnswer(next)
+                            }
                           }}
                           disabled={previewSubmitted}
                           className={`w-full p-4 text-left rounded-lg border-2 transition-all ${
@@ -1139,7 +1145,7 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
                         >
                           <div className="flex items-center gap-3">
                             <span
-                              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                              className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-medium ${
                                 showCorrect && isCorrect
                                   ? 'bg-green-500 text-white'
                                   : showCorrect && isSelected && !isCorrect
@@ -1203,7 +1209,7 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
                     onClick={() => setPreviewSubmitted(true)}
                     disabled={
                       previewQuestion.question_type === 'multiple_choice'
-                        ? previewAnswer === null
+                        ? previewAnswer.length === 0
                         : !previewTextAnswer.trim()
                     }
                     className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1213,7 +1219,7 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
                 ) : (
                   <button
                     onClick={() => {
-                      setPreviewAnswer(null)
+                      setPreviewAnswer([])
                       setPreviewTextAnswer('')
                       setPreviewSubmitted(false)
                     }}
