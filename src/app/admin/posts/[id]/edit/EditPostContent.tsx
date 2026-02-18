@@ -1,6 +1,7 @@
 // Created: 2026-01-27 18:00:00
 // Updated: 2026-01-29 - Supabase 실제 연동, 그룹 선택 UI 추가
 // Updated: 2026-02-10 - 동적 그룹 조회 및 개인 지정 타겟팅 추가
+// Updated: 2026-02-18 - 테스트 문제 추가/수정 기능 (QuestionBuilder)
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -8,6 +9,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import MarkdownEditor from '@/components/MarkdownEditor'
+import QuestionBuilder, { QuestionData } from '@/components/QuestionBuilder'
 
 type ContentType = 'video' | 'document'
 type Category = '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개' | '추가_서비스_규칙' | '개인_피드백'
@@ -62,6 +64,10 @@ export default function EditPostContent({ post, initialGroups, initialTargetUser
   const [isAddingNewSubCategory, setIsAddingNewSubCategory] = useState(false)
   const [newSubCategoryName, setNewSubCategoryName] = useState('')
   const [externalLink, setExternalLink] = useState(post.external_link || '')
+  const [includeTest, setIncludeTest] = useState(false)
+  const [questions, setQuestions] = useState<QuestionData[]>([])
+  const [testVisibility, setTestVisibility] = useState<'all' | 'targeted'>('all')
+  const [uploadedImages, setUploadedImages] = useState<string[]>([])
   const [formData, setFormData] = useState({
     title: post.title,
     content_type: post.content_type,
@@ -69,17 +75,37 @@ export default function EditPostContent({ post, initialGroups, initialTargetUser
     category: post.category,
   })
 
-  // 서브카테고리, 그룹, 매니저 목록 조회
+  // 서브카테고리, 그룹, 매니저 목록 및 기존 테스트 문제 조회
   useEffect(() => {
     const fetchData = async () => {
-      const [{ data: subCatData }, { data: groupsData }, { data: managersData }] = await Promise.all([
+      const [{ data: subCatData }, { data: groupsData }, { data: managersData }, { data: existingQs }] = await Promise.all([
         supabase.from('sub_categories').select('*').order('sort_order').order('name'),
         supabase.from('groups').select('id, name').order('name'),
         supabase.from('users').select('id, username, nickname').eq('role', 'manager').order('username'),
+        supabase.from('test_questions').select('*').eq('related_post_id', post.id),
       ])
       setSubCategories(subCatData || [])
       setGroups(groupsData || [])
       setManagers(managersData || [])
+
+      if (existingQs && existingQs.length > 0) {
+        setIncludeTest(true)
+        setQuestions(existingQs.map((q: any) => ({
+          id: q.id,
+          question: q.question,
+          question_type: q.question_type || 'multiple_choice',
+          question_image_url: q.question_image_url || null,
+          options: q.question_type === 'subjective' ? ['', '', '', ''] : ((q.options as string[]) || ['', '', '', '']),
+          correct_answer: Array.isArray(q.correct_answer)
+            ? ((q.correct_answer as number[])[0] ?? null)
+            : typeof q.correct_answer === 'number'
+            ? q.correct_answer
+            : null,
+          max_score: q.max_score || 10,
+          grading_criteria: q.grading_criteria || null,
+          model_answer: q.model_answer || null,
+        })))
+      }
     }
     fetchData()
   }, [])
@@ -163,6 +189,7 @@ export default function EditPostContent({ post, initialGroups, initialTargetUser
         sub_category: selectedSubCategory || null,
         external_link: externalLink.trim() || null,
         targeting_type: targetingType,
+        test_visibility: (targetingType === 'individual' && includeTest) ? testVisibility : 'all',
       }
 
       if (approveAfterSave) {
@@ -195,6 +222,26 @@ export default function EditPostContent({ post, initialGroups, initialTargetUser
         }))
         const { error: targetError } = await supabase.from('post_target_users').insert(targetInserts)
         if (targetError) throw targetError
+      }
+
+      // 기존 테스트 문제 삭제 후 재저장
+      await supabase.from('test_questions').delete().eq('related_post_id', post.id)
+      if (includeTest && questions.length > 0) {
+        const questionInserts = questions.map(q => ({
+          category: formData.category,
+          sub_category: null,
+          question: q.question,
+          question_type: q.question_type,
+          question_image_url: q.question_image_url,
+          options: q.question_type === 'multiple_choice' ? q.options : null,
+          correct_answer: q.question_type === 'multiple_choice' ? q.correct_answer : null,
+          max_score: q.max_score,
+          grading_criteria: q.grading_criteria,
+          model_answer: q.model_answer,
+          related_post_id: post.id,
+        }))
+        const { error: questionError } = await supabase.from('test_questions').insert(questionInserts)
+        if (questionError) console.error('Question save error:', questionError)
       }
 
       router.push(approveAfterSave ? '/admin/posts/pending' : '/admin/posts')
@@ -693,6 +740,74 @@ export default function EditPostContent({ post, initialGroups, initialTargetUser
                 rows={15}
               />
             </div>
+          )}
+        </div>
+
+        {/* 테스트 문제 섹션 */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">테스트 문제</h2>
+              <p className="text-sm text-gray-500">
+                이 교육 자료와 연결된 테스트 문제를 추가합니다.
+              </p>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={includeTest}
+                onChange={(e) => setIncludeTest(e.target.checked)}
+                className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+              />
+              <span className="text-sm font-medium text-gray-700">테스트 추가</span>
+            </label>
+          </div>
+
+          {includeTest && targetingType === 'individual' && (
+            <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                테스트 공개 범위
+              </label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="test_visibility"
+                    value="all"
+                    checked={testVisibility === 'all'}
+                    onChange={() => setTestVisibility('all')}
+                    className="w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
+                  />
+                  <span className="text-sm text-gray-700">전체 공개</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="test_visibility"
+                    value="targeted"
+                    checked={testVisibility === 'targeted'}
+                    onChange={() => setTestVisibility('targeted')}
+                    className="w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
+                  />
+                  <span className="text-sm text-gray-700">대상자만</span>
+                </label>
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                {testVisibility === 'all'
+                  ? '연결된 테스트 문제가 모든 매니저에게 공개됩니다.'
+                  : '연결된 테스트 문제가 지정된 매니저에게만 노출됩니다.'}
+              </p>
+            </div>
+          )}
+
+          {includeTest && (
+            <QuestionBuilder
+              questions={questions}
+              onChange={setQuestions}
+              category={formData.category}
+              content={formData.content}
+              uploadedImages={uploadedImages}
+            />
           )}
         </div>
 

@@ -485,10 +485,10 @@ export default function PostDetail({
           </div>
           <div className="p-4 bg-gray-50 border-t border-gray-200">
             <Link
-              href={`/manager/test/${encodeURIComponent(post.category)}`}
+              href={`/manager/test/${encodeURIComponent(post.category)}?postId=${post.id}`}
               className="w-full block text-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
             >
-              이 카테고리 테스트 응시하기
+              이 교육 자료 테스트 응시하기
             </Link>
           </div>
         </div>

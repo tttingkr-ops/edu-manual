@@ -1,18 +1,19 @@
 // Created: 2026-01-27 17:35:00
 // Updated: 2026-02-01 - 주관식 문제 지원 (question_type, max_score 등 추가)
 // Updated: 2026-02-14 - 재테스트, 개인 할당 문제, 타겟팅 필터링 추가
+// Updated: 2026-02-18 - postId 필터링(게시글별 테스트), 그룹 기반 접근 제어 추가
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import TestContent from './TestContent'
 
 interface PageProps {
   params: Promise<{ category: string }>
-  searchParams: Promise<{ retestId?: string }>
+  searchParams: Promise<{ retestId?: string; postId?: string }>
 }
 
 export default async function TestPage({ params, searchParams }: PageProps) {
   const { category } = await params
-  const { retestId } = await searchParams
+  const { retestId, postId } = await searchParams
   const decodedCategory = decodeURIComponent(category)
   const supabase = await createClient()
 
@@ -40,6 +41,26 @@ export default async function TestPage({ params, searchParams }: PageProps) {
     redirect('/manager/test')
   }
 
+  // 그룹 기반 게시물 접근 필터링 데이터 (그룹 제한이 있는 게시물 필터링용)
+  let userAccessibleGroupPostIds = new Set<string>()
+  let groupRestrictedPostIds = new Set<string>()
+  if (userGroupNames.length > 0) {
+    const [{ data: userGroupPosts }, { data: allGroupPosts }] = await Promise.all([
+      supabase.from('post_groups').select('post_id').in('group_name', userGroupNames),
+      supabase.from('post_groups').select('post_id'),
+    ])
+    userAccessibleGroupPostIds = new Set((userGroupPosts || []).map((pg: any) => pg.post_id))
+    groupRestrictedPostIds = new Set((allGroupPosts || []).map((pg: any) => pg.post_id))
+  }
+
+  // 그룹 접근 가능 여부 판단: 그룹 제한이 있는 게시물인 경우 사용자 그룹 확인
+  const isGroupAccessible = (relatedPostId: string | null) => {
+    if (!relatedPostId) return true
+    if (userGroupNames.length === 0) return true // 그룹 없는 사용자(관리자)는 모두 접근 가능
+    if (!groupRestrictedPostIds.has(relatedPostId)) return true // 그룹 제한 없는 게시물
+    return userAccessibleGroupPostIds.has(relatedPostId)
+  }
+
   // 문제 조회
   interface Question {
     id: string
@@ -58,6 +79,7 @@ export default async function TestPage({ params, searchParams }: PageProps) {
 
   let questions: Question[] = []
   let retestInfo: { id: string; reason: string | null; category: string | null } | null = null
+  let postTitle: string | null = null
 
   // 재테스트 모드
   if (retestId) {
@@ -112,6 +134,33 @@ export default async function TestPage({ params, searchParams }: PageProps) {
         }))
       }
     }
+  } else if (postId) {
+    // 특정 게시글에 연결된 문제만 조회 (교육 자료 상세에서 "이 교육 자료 테스트 응시하기" 클릭 시)
+    const { data: postData } = await supabase
+      .from('educational_posts')
+      .select('title')
+      .eq('id', postId)
+      .single()
+
+    postTitle = postData?.title || null
+
+    const { data } = await supabase
+      .from('test_questions')
+      .select('*')
+      .eq('related_post_id', postId)
+
+    questions = (data || []).map(q => ({
+      ...q,
+      question_type: q.question_type || 'multiple_choice',
+      question_image_url: q.question_image_url || null,
+      options: q.question_type === 'subjective' ? null : ((q.options as string[]) || []),
+      max_score: q.max_score || 10,
+      correct_answer: Array.isArray(q.correct_answer)
+        ? (q.correct_answer as number[])
+        : q.correct_answer !== null && q.correct_answer !== undefined
+        ? [q.correct_answer as unknown as number]
+        : null,
+    }))
   } else if (decodedCategory === '내_할당_문제') {
     // 나에게 타겟된 게시물의 test_visibility='targeted' 문제만 조회
     const { data: targetedPosts } = await supabase
@@ -164,7 +213,7 @@ export default async function TestPage({ params, searchParams }: PageProps) {
         if (visibility === 'targeted') {
           return userTargetPostIds.has(q.related_post_id)
         }
-        return true // 'all' or no visibility set
+        return isGroupAccessible(q.related_post_id)
       })
 
       const shuffled = [...filteredData].sort(() => Math.random() - 0.5)
@@ -189,7 +238,7 @@ export default async function TestPage({ params, searchParams }: PageProps) {
       .select('*, educational_posts(test_visibility)')
       .eq('category', decodedCategory)
 
-    // test_visibility='targeted' 필터링
+    // test_visibility='targeted' 및 그룹 제한 필터링
     const { data: userTargetPosts } = await supabase
       .from('post_target_users')
       .select('post_id')
@@ -202,7 +251,7 @@ export default async function TestPage({ params, searchParams }: PageProps) {
       if (visibility === 'targeted') {
         return userTargetPostIds.has(q.related_post_id)
       }
-      return true
+      return isGroupAccessible(q.related_post_id)
     })
 
     questions = filteredData.map((q: any) => ({
@@ -212,15 +261,21 @@ export default async function TestPage({ params, searchParams }: PageProps) {
       question_image_url: q.question_image_url || null,
       options: q.question_type === 'subjective' ? null : ((q.options as string[]) || []),
       max_score: q.max_score || 10,
+      correct_answer: Array.isArray(q.correct_answer)
+        ? (q.correct_answer as number[])
+        : q.correct_answer !== null && q.correct_answer !== undefined
+        ? [q.correct_answer as unknown as number]
+        : null,
     }))
   }
 
-  const categoryTitle =
-    decodedCategory === '전체'
-      ? '전체 테스트'
-      : decodedCategory === '내_할당_문제'
-      ? '나에게 할당된 문제'
-      : decodedCategory.replace(/_/g, ' ')
+  const categoryTitle = postId && postTitle
+    ? `${postTitle} 테스트`
+    : decodedCategory === '전체'
+    ? '전체 테스트'
+    : decodedCategory === '내_할당_문제'
+    ? '나에게 할당된 문제'
+    : decodedCategory.replace(/_/g, ' ')
 
   return (
     <TestContent
