@@ -497,9 +497,17 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
                           </span>
                         )}
                       </div>
-                      <p className="font-medium text-gray-900 mb-2">
+                      <button
+                        onClick={() => {
+                          setPreviewQuestion(question)
+                          setPreviewAnswer(null)
+                          setPreviewTextAnswer('')
+                          setPreviewSubmitted(false)
+                        }}
+                        className="font-medium text-gray-900 mb-2 text-left hover:text-blue-600 transition-colors cursor-pointer"
+                      >
                         {question.question}
-                      </p>
+                      </button>
                       {parseQuestionImages(question.question_image_url).length > 0 && (
                         <div className="mb-2 flex flex-wrap gap-1">
                           {parseQuestionImages(question.question_image_url).map((imgUrl, i) => (
