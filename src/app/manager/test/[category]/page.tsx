@@ -49,7 +49,7 @@ export default async function TestPage({ params, searchParams }: PageProps) {
     question_type: 'multiple_choice' | 'subjective'
     question_image_url: string | null
     options: string[] | null
-    correct_answer: number | null
+    correct_answer: number[] | null
     max_score: number
     grading_criteria: string | null
     model_answer: string | null
@@ -85,6 +85,11 @@ export default async function TestPage({ params, searchParams }: PageProps) {
           question_image_url: q.question_image_url || null,
           options: q.question_type === 'subjective' ? null : ((q.options as string[]) || []),
           max_score: q.max_score || 10,
+          correct_answer: Array.isArray(q.correct_answer)
+            ? (q.correct_answer as number[])
+            : q.correct_answer !== null && q.correct_answer !== undefined
+            ? [q.correct_answer as unknown as number]
+            : null,
         }))
       } else if (assignment.category) {
         // 해당 카테고리 전체 로드
@@ -99,6 +104,11 @@ export default async function TestPage({ params, searchParams }: PageProps) {
           question_image_url: q.question_image_url || null,
           options: q.question_type === 'subjective' ? null : ((q.options as string[]) || []),
           max_score: q.max_score || 10,
+          correct_answer: Array.isArray(q.correct_answer)
+            ? (q.correct_answer as number[])
+            : q.correct_answer !== null && q.correct_answer !== undefined
+            ? [q.correct_answer as unknown as number]
+            : null,
         }))
       }
     }
@@ -125,6 +135,11 @@ export default async function TestPage({ params, searchParams }: PageProps) {
         question_image_url: q.question_image_url || null,
         options: q.question_type === 'subjective' ? null : ((q.options as string[]) || []),
         max_score: q.max_score || 10,
+        correct_answer: Array.isArray(q.correct_answer)
+          ? (q.correct_answer as number[])
+          : q.correct_answer !== null && q.correct_answer !== undefined
+          ? [q.correct_answer as unknown as number]
+          : null,
       }))
     }
   } else if (decodedCategory === '전체') {
@@ -160,6 +175,11 @@ export default async function TestPage({ params, searchParams }: PageProps) {
         question_image_url: q.question_image_url || null,
         options: q.question_type === 'subjective' ? null : ((q.options as string[]) || []),
         max_score: q.max_score || 10,
+        correct_answer: Array.isArray(q.correct_answer)
+          ? (q.correct_answer as number[])
+          : q.correct_answer !== null && q.correct_answer !== undefined
+          ? [q.correct_answer as unknown as number]
+          : null,
       }))
     }
   } else {

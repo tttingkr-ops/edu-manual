@@ -70,6 +70,11 @@ export default async function PostDetailPage({ params }: PageProps) {
       relatedQuestions={(relatedQuestions || []).map(q => ({
         ...q,
         options: q.options as string[] | null,
+        correct_answer: Array.isArray(q.correct_answer)
+          ? (q.correct_answer as number[])
+          : q.correct_answer !== null && q.correct_answer !== undefined
+          ? [q.correct_answer as unknown as number]
+          : null,
       }))}
       comments={(comments || []).map((c: any) => ({
         id: c.id,

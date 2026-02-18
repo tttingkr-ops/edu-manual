@@ -26,7 +26,7 @@ interface Question {
   question_type: 'multiple_choice' | 'subjective'
   question_image_url: string | null
   options: string[] | null
-  correct_answer: number | null
+  correct_answer: number[] | null
   max_score: number
   grading_criteria: string | null
   model_answer: string | null
@@ -65,8 +65,8 @@ export default function TestContent({
   const router = useRouter()
   const supabase = createClient()
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [multipleChoiceAnswers, setMultipleChoiceAnswers] = useState<(number | null)[]>(
-    new Array(questions.length).fill(null)
+  const [multipleChoiceAnswers, setMultipleChoiceAnswers] = useState<number[][]>(
+    Array.from({ length: questions.length }, () => [])
   )
   const [subjectiveAnswers, setSubjectiveAnswers] = useState<Record<string, SubjectiveAnswer>>({})
   const [gradingResults, setGradingResults] = useState<Record<string, GradingResult>>({})
@@ -85,7 +85,7 @@ export default function TestContent({
     let count = 0
     questions.forEach((q, index) => {
       if (q.question_type === 'multiple_choice') {
-        if (multipleChoiceAnswers[index] !== null) count++
+        if (multipleChoiceAnswers[index].length > 0) count++
       } else {
         const answer = subjectiveAnswers[q.id]
         if (answer && (answer.text.trim() || answer.imageUrl)) count++
@@ -97,10 +97,14 @@ export default function TestContent({
   const answeredCount = getAnsweredCount()
   const progress = (answeredCount / questions.length) * 100
 
-  // 객관식 답변 선택
+  // 객관식 답변 선택 (복수 선택 토글)
   const handleMultipleChoiceAnswer = (optionIndex: number) => {
+    const current = multipleChoiceAnswers[currentIndex]
+    const next = current.includes(optionIndex)
+      ? current.filter(i => i !== optionIndex)
+      : [...current, optionIndex].sort((a, b) => a - b)
     const newAnswers = [...multipleChoiceAnswers]
-    newAnswers[currentIndex] = optionIndex
+    newAnswers[currentIndex] = next
     setMultipleChoiceAnswers(newAnswers)
   }
 
@@ -252,16 +256,27 @@ export default function TestContent({
     let correctCount = 0
     let totalScore = 0
     let maxTotalScore = 0
-    const wrongAnswers: { question: Question; userAnswer: number | null }[] = []
+    const wrongAnswers: { question: Question; userAnswer: number[] }[] = []
+
+    const answersEqual = (a: number[], b: number[]) => {
+      if (a.length !== b.length) return false
+      const sa = [...a].sort((x, y) => x - y)
+      const sb = [...b].sort((x, y) => x - y)
+      return sa.every((v, i) => v === sb[i])
+    }
 
     questions.forEach((q, index) => {
       if (q.question_type === 'multiple_choice') {
         maxTotalScore += q.max_score
-        if (multipleChoiceAnswers[index] === q.correct_answer) {
+        const userAnswer = multipleChoiceAnswers[index]
+        const correct = Array.isArray(q.correct_answer)
+          ? q.correct_answer
+          : q.correct_answer !== null ? [q.correct_answer as unknown as number] : []
+        if (answersEqual(userAnswer, correct)) {
           correctCount++
           totalScore += q.max_score
         } else {
-          wrongAnswers.push({ question: q, userAnswer: multipleChoiceAnswers[index] })
+          wrongAnswers.push({ question: q, userAnswer })
         }
       } else {
         maxTotalScore += q.max_score
@@ -338,7 +353,7 @@ export default function TestContent({
               onClick={() => {
                 setShowResult(false)
                 setCurrentIndex(0)
-                setMultipleChoiceAnswers(new Array(questions.length).fill(null))
+                setMultipleChoiceAnswers(Array.from({ length: questions.length }, () => []))
                 setSubjectiveAnswers({})
                 setGradingResults({})
                 setIsSubmitting(false)
@@ -372,22 +387,28 @@ export default function TestContent({
                     {index + 1}. {question.question}
                   </p>
                   <div className="space-y-2 text-sm">
-                    {question.options?.map((option, optIndex) => (
-                      <div
-                        key={optIndex}
-                        className={`p-2 rounded ${
-                          optIndex === question.correct_answer
-                            ? 'bg-green-100 text-green-800 font-medium'
-                            : optIndex === userAnswer
-                            ? 'bg-red-100 text-red-800 line-through'
-                            : 'bg-gray-50 text-gray-600'
-                        }`}
-                      >
-                        {optIndex + 1}. {option}
-                        {optIndex === question.correct_answer && ' ✓ 정답'}
-                        {optIndex === userAnswer && optIndex !== question.correct_answer && ' ✗ 오답'}
-                      </div>
-                    ))}
+                    {question.options?.map((option, optIndex) => {
+                      const isCorrect = Array.isArray(question.correct_answer)
+                        ? question.correct_answer.includes(optIndex)
+                        : optIndex === (question.correct_answer as unknown as number)
+                      const isSelected = userAnswer.includes(optIndex)
+                      return (
+                        <div
+                          key={optIndex}
+                          className={`p-2 rounded ${
+                            isCorrect
+                              ? 'bg-green-100 text-green-800 font-medium'
+                              : isSelected
+                              ? 'bg-red-100 text-red-800 line-through'
+                              : 'bg-gray-50 text-gray-600'
+                          }`}
+                        >
+                          {optIndex + 1}. {option}
+                          {isCorrect && ' ✓ 정답'}
+                          {isSelected && !isCorrect && ' ✗ 오답'}
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               ))}
@@ -550,20 +571,21 @@ export default function TestContent({
         {/* 객관식 선택지 */}
         {isMultipleChoice && currentQuestion.options && (
           <div className="space-y-3">
+            <p className="text-xs text-gray-500 mb-1">복수 선택 가능 (해당하는 답을 모두 선택하세요)</p>
             {currentQuestion.options.map((option, index) => (
               <button
                 key={index}
                 onClick={() => handleMultipleChoiceAnswer(index)}
                 className={`w-full p-4 text-left rounded-lg border-2 transition-all ${
-                  multipleChoiceAnswers[currentIndex] === index
+                  multipleChoiceAnswers[currentIndex].includes(index)
                     ? 'border-primary-500 bg-primary-50 text-primary-900'
                     : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                 }`}
               >
                 <div className="flex items-center gap-3">
                   <span
-                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                      multipleChoiceAnswers[currentIndex] === index
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-medium ${
+                      multipleChoiceAnswers[currentIndex].includes(index)
                         ? 'bg-primary-500 text-white'
                         : 'bg-gray-100 text-gray-600'
                     }`}
@@ -650,7 +672,7 @@ export default function TestContent({
       <div className="flex flex-wrap gap-2 mb-6">
         {questions.map((q, index) => {
           const isAnswered = q.question_type === 'multiple_choice'
-            ? multipleChoiceAnswers[index] !== null
+            ? multipleChoiceAnswers[index].length > 0
             : !!(subjectiveAnswers[q.id]?.text.trim() || subjectiveAnswers[q.id]?.imageUrl)
 
           return (

@@ -18,6 +18,11 @@ export default async function TestsPage() {
     question_type: q.question_type || 'multiple_choice',
     options: q.question_type === 'subjective' ? null : ((q.options as string[]) || []),
     max_score: q.max_score || 10,
+    correct_answer: Array.isArray(q.correct_answer)
+      ? (q.correct_answer as number[])
+      : q.correct_answer !== null && q.correct_answer !== undefined
+      ? [q.correct_answer as unknown as number]
+      : null,
   }))
 
   return <TestsContent questions={formattedQuestions} />

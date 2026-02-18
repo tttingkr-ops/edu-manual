@@ -22,7 +22,7 @@ interface ReviewQuestion {
   question_type: 'multiple_choice' | 'subjective'
   question_image_url: string | null
   options: string[] | null
-  correct_answer: number | null
+  correct_answer: number[] | null
   max_score: number
   relatedPostTitle: string | null
   relatedPostId: string | null
@@ -43,8 +43,8 @@ export default function ReviewContent({
 }: ReviewContentProps) {
   const supabase = createClient()
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [answers, setAnswers] = useState<(number | null)[]>(
-    new Array(questions.length).fill(null)
+  const [answers, setAnswers] = useState<number[][]>(
+    Array.from({ length: questions.length }, () => [])
   )
   const [showResult, setShowResult] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -71,12 +71,16 @@ export default function ReviewContent({
   }
 
   const currentQuestion = mcQuestions[currentIndex]
-  const answeredCount = answers.filter(a => a !== null).length
+  const answeredCount = answers.filter(a => a.length > 0).length
   const progress = (answeredCount / mcQuestions.length) * 100
 
   const handleAnswer = (optionIndex: number) => {
+    const current = answers[currentIndex]
+    const next = current.includes(optionIndex)
+      ? current.filter(i => i !== optionIndex)
+      : [...current, optionIndex].sort((a, b) => a - b)
     const newAnswers = [...answers]
-    newAnswers[currentIndex] = optionIndex
+    newAnswers[currentIndex] = next
     setAnswers(newAnswers)
   }
 
@@ -84,19 +88,30 @@ export default function ReviewContent({
     setIsSubmitting(true)
 
     // 결과 계산
+    const answersEqual = (a: number[], b: number[]) => {
+      if (a.length !== b.length) return false
+      const sa = [...a].sort((x, y) => x - y)
+      const sb = [...b].sort((x, y) => x - y)
+      return sa.every((v, i) => v === sb[i])
+    }
+
     let correctOnReview = 0
-    const reviewResults: { questionId: string; answer: number | null; isCorrect: boolean }[] = []
+    const reviewResults: { questionId: string; answer: number[]; isCorrect: boolean }[] = []
 
     mcQuestions.forEach((q, index) => {
       const userAnswer = answers[index]
-      const isCorrect = userAnswer === q.correct_answer
+      const correct = Array.isArray(q.correct_answer)
+        ? q.correct_answer
+        : q.correct_answer !== null ? [q.correct_answer as unknown as number] : []
+      const isCorrect = answersEqual(userAnswer, correct)
       if (isCorrect) correctOnReview++
       reviewResults.push({ questionId: q.id, answer: userAnswer, isCorrect })
     })
 
     // wrong_answer_reviews에 저장
     try {
-      const inserts = reviewResults.map(r => ({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const inserts: any[] = reviewResults.map(r => ({
         user_id: userId,
         test_result_id: testResultId,
         question_id: r.questionId,
@@ -116,9 +131,18 @@ export default function ReviewContent({
 
   // 결과 화면
   if (showResult) {
+    const answersEqual = (a: number[], b: number[]) => {
+      if (a.length !== b.length) return false
+      const sa = [...a].sort((x, y) => x - y)
+      const sb = [...b].sort((x, y) => x - y)
+      return sa.every((v, i) => v === sb[i])
+    }
     let correctOnReview = 0
     mcQuestions.forEach((q, index) => {
-      if (answers[index] === q.correct_answer) correctOnReview++
+      const correct = Array.isArray(q.correct_answer)
+        ? q.correct_answer
+        : q.correct_answer !== null ? [q.correct_answer as unknown as number] : []
+      if (answersEqual(answers[index], correct)) correctOnReview++
     })
     const score = Math.round((correctOnReview / mcQuestions.length) * 100)
 
@@ -158,7 +182,10 @@ export default function ReviewContent({
           <div className="space-y-4">
             {mcQuestions.map((q, index) => {
               const userAnswer = answers[index]
-              const isCorrect = userAnswer === q.correct_answer
+              const correct = Array.isArray(q.correct_answer)
+                ? q.correct_answer
+                : q.correct_answer !== null ? [q.correct_answer as unknown as number] : []
+              const isCorrect = answersEqual(userAnswer, correct)
 
               return (
                 <div key={q.id} className={`p-4 rounded-lg border ${
@@ -175,18 +202,22 @@ export default function ReviewContent({
                     </span>
                   </div>
                   <div className="space-y-1 text-sm">
-                    {q.options?.map((option, optIndex) => (
+                    {q.options?.map((option, optIndex) => {
+                      const optIsCorrect = correct.includes(optIndex)
+                      const optIsSelected = userAnswer.includes(optIndex)
+                      return (
                       <div key={optIndex} className={`p-2 rounded ${
-                        optIndex === q.correct_answer
+                        optIsCorrect
                           ? 'bg-green-100 text-green-800 font-medium'
-                          : optIndex === userAnswer && !isCorrect
+                          : optIsSelected && !optIsCorrect
                           ? 'bg-red-100 text-red-800 line-through'
                           : 'text-gray-600'
                       }`}>
                         {optIndex + 1}. {option}
-                        {optIndex === q.correct_answer && ' ✓'}
+                        {optIsCorrect && ' ✓'}
                       </div>
-                    ))}
+                      )
+                    })}
                   </div>
                   {q.relatedPostId && (
                     <Link
@@ -268,19 +299,20 @@ export default function ReviewContent({
         {/* 선택지 */}
         {currentQuestion.options && (
           <div className="space-y-3">
+            <p className="text-xs text-gray-500 mb-1">복수 선택 가능 (해당하는 답을 모두 선택하세요)</p>
             {currentQuestion.options.map((option, index) => (
               <button
                 key={index}
                 onClick={() => handleAnswer(index)}
                 className={`w-full p-4 text-left rounded-lg border-2 transition-all ${
-                  answers[currentIndex] === index
+                  answers[currentIndex].includes(index)
                     ? 'border-amber-500 bg-amber-50 text-amber-900'
                     : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                    answers[currentIndex] === index
+                  <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-medium ${
+                    answers[currentIndex].includes(index)
                       ? 'bg-amber-500 text-white'
                       : 'bg-gray-100 text-gray-600'
                   }`}>
@@ -319,7 +351,7 @@ export default function ReviewContent({
             className={`w-10 h-10 rounded-lg text-sm font-medium transition-colors ${
               index === currentIndex
                 ? 'bg-amber-600 text-white'
-                : answers[index] !== null
+                : answers[index].length > 0
                 ? 'bg-green-100 text-green-800'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}

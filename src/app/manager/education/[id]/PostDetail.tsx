@@ -2,6 +2,17 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+
+// Parse question_image_url - handles both single URL (legacy) and JSON array
+function parseQuestionImages(val: string | null): string[] {
+  if (!val) return []
+  try {
+    const parsed = JSON.parse(val)
+    return Array.isArray(parsed) ? parsed : [val]
+  } catch {
+    return val ? [val] : []
+  }
+}
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
@@ -26,7 +37,7 @@ interface RelatedQuestion {
   question_type: 'multiple_choice' | 'subjective'
   question_image_url: string | null
   options: string[] | null
-  correct_answer: number | null
+  correct_answer: number[] | null
   max_score: number
 }
 
@@ -442,24 +453,29 @@ export default function PostDetail({
                       <span className="text-xs text-gray-500">{q.max_score}점</span>
                     </div>
                     <p className="text-gray-900 font-medium">{q.question}</p>
-                    {q.question_image_url && (
-                      <img src={q.question_image_url} alt="문제 이미지" className="mt-2 max-h-32 rounded border" />
-                    )}
+                    {parseQuestionImages(q.question_image_url).map((imgUrl, imgIdx) => (
+                      <img key={imgIdx} src={imgUrl} alt={`문제 이미지 ${imgIdx + 1}`} className="mt-2 max-h-32 rounded border" />
+                    ))}
                     {q.question_type === 'multiple_choice' && q.options && (
                       <div className="mt-2 grid grid-cols-2 gap-1.5 text-sm">
-                        {q.options.map((opt, i) => (
+                        {q.options.map((opt, i) => {
+                          const isCorrect = Array.isArray(q.correct_answer)
+                            ? q.correct_answer.includes(i)
+                            : i === (q.correct_answer as unknown as number)
+                          return (
                           <div
                             key={i}
                             className={`p-1.5 rounded ${
-                              i === q.correct_answer
+                              isCorrect
                                 ? 'bg-green-50 text-green-800 font-medium'
                                 : 'bg-gray-50 text-gray-600'
                             }`}
                           >
                             {i + 1}. {opt}
-                            {i === q.correct_answer && <span className="ml-1 text-green-600">✓</span>}
+                            {isCorrect && <span className="ml-1 text-green-600">✓</span>}
                           </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     )}
                   </div>

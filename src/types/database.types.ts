@@ -174,7 +174,7 @@ export interface Database {
           sub_category: string | null;
           question: string;
           options: Json | null;
-          correct_answer: number | null;
+          correct_answer: Json | null;
           related_post_id: string | null;
           question_type: 'multiple_choice' | 'subjective';
           max_score: number;
@@ -188,7 +188,7 @@ export interface Database {
           sub_category?: string | null;
           question: string;
           options?: Json | null;
-          correct_answer?: number | null;
+          correct_answer?: Json | null;
           related_post_id?: string | null;
           question_type?: 'multiple_choice' | 'subjective';
           max_score?: number;
@@ -202,7 +202,7 @@ export interface Database {
           sub_category?: string | null;
           question?: string;
           options?: Json | null;
-          correct_answer?: number | null;
+          correct_answer?: Json | null;
           related_post_id?: string | null;
           question_type?: 'multiple_choice' | 'subjective';
           max_score?: number;

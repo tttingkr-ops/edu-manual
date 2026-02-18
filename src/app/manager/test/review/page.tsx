@@ -45,6 +45,11 @@ export default async function ReviewPage({ searchParams }: PageProps) {
         question_image_url: q.question_image_url || null,
         options: q.question_type === 'subjective' ? null : ((q.options as string[]) || []),
         max_score: q.max_score || 10,
+        correct_answer: Array.isArray(q.correct_answer)
+          ? (q.correct_answer as number[])
+          : q.correct_answer !== null && q.correct_answer !== undefined
+          ? [q.correct_answer as unknown as number]
+          : null,
         relatedPostTitle: q.educational_posts?.title || null,
         relatedPostId: q.educational_posts?.id || null,
       }))

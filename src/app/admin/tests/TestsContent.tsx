@@ -38,7 +38,7 @@ interface Question {
   question_type: 'multiple_choice' | 'subjective'
   question_image_url: string | null
   options: string[] | null
-  correct_answer: number | null
+  correct_answer: number[] | null
   max_score: number
   grading_criteria: string | null
   model_answer: string | null
@@ -92,7 +92,7 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
     question_type: 'multiple_choice' as 'multiple_choice' | 'subjective',
     question_image_url: '' as string,
     options: ['', '', '', ''],
-    correct_answer: 0,
+    correct_answer: [0] as number[],
     max_score: 10,
     grading_criteria: '',
     model_answer: '',
@@ -221,7 +221,7 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
       question_type: 'multiple_choice',
       question_image_url: '',
       options: ['', '', '', ''],
-      correct_answer: 0,
+      correct_answer: [0] as number[],
       max_score: 10,
       grading_criteria: '',
       model_answer: '',
@@ -241,7 +241,11 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
       question_type: question.question_type,
       question_image_url: question.question_image_url || '',
       options: question.options ? [...question.options] : ['', '', '', ''],
-      correct_answer: question.correct_answer ?? 0,
+      correct_answer: Array.isArray(question.correct_answer)
+        ? question.correct_answer
+        : question.correct_answer !== null && question.correct_answer !== undefined
+        ? [question.correct_answer as unknown as number]
+        : [0],
       max_score: question.max_score,
       grading_criteria: question.grading_criteria || '',
       model_answer: question.model_answer || '',
@@ -299,9 +303,18 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
 
         if (updateError) throw updateError
 
+        const formatted = {
+          ...data,
+          options: data.options as string[] | null,
+          correct_answer: Array.isArray(data.correct_answer)
+            ? (data.correct_answer as number[])
+            : data.correct_answer !== null && data.correct_answer !== undefined
+            ? [data.correct_answer as unknown as number]
+            : null,
+        }
         setQuestions(
           questions.map((q) =>
-            q.id === editingQuestion.id ? { ...data, options: data.options as string[] | null } : q
+            q.id === editingQuestion.id ? formatted : q
           )
         )
       } else {
@@ -314,7 +327,16 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
 
         if (insertError) throw insertError
 
-        setQuestions([...questions, { ...data, options: data.options as string[] | null }])
+        const formatted = {
+          ...data,
+          options: data.options as string[] | null,
+          correct_answer: Array.isArray(data.correct_answer)
+            ? (data.correct_answer as number[])
+            : data.correct_answer !== null && data.correct_answer !== undefined
+            ? [data.correct_answer as unknown as number]
+            : null,
+        }
+        setQuestions([...questions, formatted])
       }
 
       closeModal()
@@ -531,21 +553,26 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
                       </div>
                     ) : question.options && (
                       <div className="grid grid-cols-2 gap-2 text-sm">
-                        {question.options.map((option, optIndex) => (
+                        {question.options.map((option, optIndex) => {
+                          const isCorrect = Array.isArray(question.correct_answer)
+                            ? question.correct_answer.includes(optIndex)
+                            : optIndex === (question.correct_answer as unknown as number)
+                          return (
                           <div
                             key={optIndex}
                             className={`p-2 rounded ${
-                              optIndex === question.correct_answer
+                              isCorrect
                                 ? 'bg-green-50 text-green-800 border border-green-200'
                                 : 'bg-gray-50 text-gray-600'
                             }`}
                           >
                             {optIndex + 1}. {option}
-                            {optIndex === question.correct_answer && (
+                            {isCorrect && (
                               <span className="ml-2 text-green-600">✓</span>
                             )}
                           </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     )}
                   </div>
@@ -929,11 +956,16 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
                     {formData.options.map((option, index) => (
                       <div key={index} className="flex items-center gap-2">
                         <input
-                          type="radio"
-                          name="correct_answer"
-                          checked={formData.correct_answer === index}
-                          onChange={() => setFormData({ ...formData, correct_answer: index })}
-                          className="w-4 h-4 text-primary-600"
+                          type="checkbox"
+                          checked={formData.correct_answer.includes(index)}
+                          onChange={() => {
+                            const current = formData.correct_answer
+                            const next = current.includes(index)
+                              ? current.filter(i => i !== index)
+                              : [...current, index].sort((a, b) => a - b)
+                            setFormData({ ...formData, correct_answer: next.length > 0 ? next : current })
+                          }}
+                          className="w-4 h-4 text-green-600 rounded"
                         />
                         <span className="w-6 text-sm text-gray-500">{index + 1}.</span>
                         <input
@@ -948,7 +980,7 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
                     ))}
                   </div>
                   <p className="mt-2 text-sm text-gray-500">
-                    라디오 버튼을 클릭하여 정답을 선택하세요.
+                    체크박스를 클릭하여 정답을 선택하세요. 복수 정답도 선택 가능합니다.
                   </p>
                 </div>
               )}
@@ -1083,7 +1115,9 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
                   <div className="space-y-3">
                     {previewQuestion.options.map((option, index) => {
                       const isSelected = previewAnswer === index
-                      const isCorrect = index === previewQuestion.correct_answer
+                      const isCorrect = Array.isArray(previewQuestion.correct_answer)
+                        ? previewQuestion.correct_answer.includes(index)
+                        : index === (previewQuestion.correct_answer as unknown as number)
                       const showCorrect = previewSubmitted
 
                       return (
