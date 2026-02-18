@@ -58,6 +58,13 @@ interface MeetingDetailProps {
   nicknames?: string[]
 }
 
+const EDU_CATEGORIES = [
+  { value: '남자_매니저_대화', label: '남자 매니저 대화' },
+  { value: '여자_매니저_대화', label: '여자 매니저 대화' },
+  { value: '여자_매니저_소개', label: '여자 매니저 소개' },
+  { value: '추가_서비스_규칙', label: '추가 서비스 규칙' },
+]
+
 export default function MeetingDetail({
   post,
   comments: initialComments,
@@ -73,6 +80,11 @@ export default function MeetingDetail({
   // Status state
   const [localStatus, setLocalStatus] = useState<'pending' | 'completed'>(post.status)
   const [isTogglingStatus, setIsTogglingStatus] = useState(false)
+
+  // Copy to education modal state
+  const [showCopyModal, setShowCopyModal] = useState(false)
+  const [copyCategory, setCopyCategory] = useState<string>('남자_매니저_대화')
+  const [isCopying, setIsCopying] = useState(false)
 
   // Comment state
   const [newComment, setNewComment] = useState('')
@@ -118,10 +130,88 @@ export default function MeetingDetail({
     return `${dateStr} (${days}일 남음)`
   }
 
+  // 투표 결과를 텍스트로 변환
+  const buildPollResultText = () => {
+    const totalVotesCount = localOptions.reduce((sum, opt) => sum + opt.vote_count, 0)
+    let text = ''
+    if (post.content) {
+      text += post.content + '\n\n---\n\n'
+    }
+    text += '## 투표 결과\n\n'
+    const sorted = [...localOptions].sort((a, b) => b.vote_count - a.vote_count)
+    sorted.forEach((opt, i) => {
+      const pct = totalVotesCount > 0 ? Math.round((opt.vote_count / totalVotesCount) * 100) : 0
+      const prefix = i === 0 && opt.vote_count > 0 ? ' (최다 득표)' : ''
+      text += `- **${opt.option_text}**: ${opt.vote_count}표 (${pct}%)${prefix}\n`
+    })
+    text += `\n> 총 ${totalVotesCount}표 참여`
+    return text
+  }
+
+  // 교육 자료로 복사
+  const handleCopyToEducation = async () => {
+    setIsCopying(true)
+    try {
+      const content = post.post_type === 'poll'
+        ? buildPollResultText()
+        : post.content || ''
+
+      const { error } = await supabase
+        .from('educational_posts')
+        .insert({
+          title: post.title,
+          content,
+          content_type: 'document' as const,
+          category: copyCategory as '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개' | '추가_서비스_규칙' | '개인_피드백',
+          author_id: currentUserId,
+          approval_status: 'approved' as const,
+        })
+
+      if (error) throw error
+
+      alert('교육 자료로 복사되었습니다.')
+      setShowCopyModal(false)
+    } catch (err: any) {
+      console.error('Copy to education error:', err)
+      alert('교육 자료 복사 중 오류가 발생했습니다.')
+    } finally {
+      setIsCopying(false)
+    }
+  }
+
   // 상태 토글
   const handleToggleStatus = async () => {
-    setIsTogglingStatus(true)
     const newStatus = localStatus === 'pending' ? 'completed' : 'pending'
+
+    // pending → completed 일 때 교육자료 복사 여부 확인
+    if (newStatus === 'completed') {
+      const wantCopy = confirm('완료 처리하시겠습니까?\n\n교육 자료로 복사하려면 "확인"을,\n단순 완료만 하려면 "취소"를 누르세요.')
+      if (wantCopy) {
+        // 먼저 상태 변경
+        setIsTogglingStatus(true)
+        try {
+          const { error } = await supabase
+            .from('meeting_posts')
+            .update({ status: newStatus })
+            .eq('id', post.id)
+          if (error) throw error
+          setLocalStatus(newStatus)
+          router.refresh()
+        } catch (err: any) {
+          console.error('Status toggle error:', err)
+          alert('상태 변경 중 오류가 발생했습니다.')
+          setIsTogglingStatus(false)
+          return
+        }
+        setIsTogglingStatus(false)
+        // 카테고리 선택 모달 열기
+        setShowCopyModal(true)
+        return
+      }
+      // 단순 완료 처리 - 아래로 계속
+    }
+
+    setIsTogglingStatus(true)
     try {
       const { error } = await supabase
         .from('meeting_posts')
@@ -129,6 +219,7 @@ export default function MeetingDetail({
         .eq('id', post.id)
       if (error) throw error
       setLocalStatus(newStatus)
+      router.refresh()
     } catch (err: any) {
       console.error('Status toggle error:', err)
       alert('상태 변경 중 오류가 발생했습니다.')
@@ -411,7 +502,7 @@ export default function MeetingDetail({
                 ) : (
                   <div className="w-4 h-4 rounded border-2 border-gray-400" />
                 )}
-                {localStatus === 'completed' ? '완료' : '미완'}
+                완료
               </button>
               {canDelete && (
                 <button
@@ -726,6 +817,58 @@ export default function MeetingDetail({
           </div>
         </div>
       </div>
+
+      {/* 교육 자료 복사 모달 */}
+      {showCopyModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">교육 자료로 복사</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                이 안건을 교육 자료로 복사할 카테고리를 선택해주세요.
+              </p>
+            </div>
+            <div className="p-6 space-y-3">
+              {EDU_CATEGORIES.map((cat) => (
+                <label
+                  key={cat.value}
+                  className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                    copyCategory === cat.value
+                      ? 'border-primary-500 bg-primary-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="copy_category"
+                    value={cat.value}
+                    checked={copyCategory === cat.value}
+                    onChange={(e) => setCopyCategory(e.target.value)}
+                    className="w-4 h-4 text-primary-600"
+                  />
+                  <span className="font-medium text-gray-900">{cat.label}</span>
+                </label>
+              ))}
+            </div>
+            <div className="flex gap-3 p-6 border-t border-gray-200">
+              <button
+                onClick={() => setShowCopyModal(false)}
+                disabled={isCopying}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                건너뛰기
+              </button>
+              <button
+                onClick={handleCopyToEducation}
+                disabled={isCopying}
+                className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
+              >
+                {isCopying ? '복사 중...' : '복사하기'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
