@@ -79,6 +79,10 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
   const [currentPage, setCurrentPage] = useState(1)
   const [showModal, setShowModal] = useState(false)
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
+  const [previewQuestion, setPreviewQuestion] = useState<Question | null>(null)
+  const [previewAnswer, setPreviewAnswer] = useState<number | null>(null)
+  const [previewTextAnswer, setPreviewTextAnswer] = useState('')
+  const [previewSubmitted, setPreviewSubmitted] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [formData, setFormData] = useState({
@@ -539,6 +543,21 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
                   </div>
                   <div className="flex items-center gap-1">
                     <button
+                      onClick={() => {
+                        setPreviewQuestion(question)
+                        setPreviewAnswer(null)
+                        setPreviewTextAnswer('')
+                        setPreviewSubmitted(false)
+                      }}
+                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                      title="미리보기"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                    </button>
+                    <button
                       onClick={() => openEditModal(question)}
                       className="p-2 text-gray-400 hover:text-primary-600 hover:bg-gray-100 rounded-lg transition-colors"
                       title="수정"
@@ -981,6 +1000,194 @@ export default function TestsContent({ questions: initialQuestions }: TestsConte
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 미리보기 모달 */}
+      {previewQuestion && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-50 rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            {/* 헤더 */}
+            <div className="flex items-center justify-between p-4 bg-white border-b border-gray-200 rounded-t-xl">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+                <h2 className="text-lg font-semibold text-gray-900">매니저 화면 미리보기</h2>
+              </div>
+              <button
+                onClick={() => setPreviewQuestion(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* 미리보기 콘텐츠 - 매니저 테스트 UI 재현 */}
+            <div className="p-6">
+              {/* 문제 카드 */}
+              <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+                {/* 문제 유형 태그 */}
+                <div className="flex items-center gap-2 mb-4">
+                  <span className={`inline-block px-3 py-1 text-sm rounded-full ${
+                    previewQuestion.question_type === 'multiple_choice'
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'bg-purple-100 text-purple-700'
+                  }`}>
+                    {previewQuestion.question_type === 'multiple_choice' ? '객관식' : '주관식'}
+                  </span>
+                  <span className="text-sm text-gray-500">
+                    {previewQuestion.max_score}점
+                  </span>
+                  {previewQuestion.sub_category && (
+                    <span className="inline-block px-3 py-1 bg-gray-100 text-gray-600 text-sm rounded-full">
+                      {previewQuestion.sub_category}
+                    </span>
+                  )}
+                </div>
+
+                {/* 문제 */}
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                  Q1. {previewQuestion.question}
+                </h2>
+
+                {/* 문제 이미지 */}
+                {parseQuestionImages(previewQuestion.question_image_url).length > 0 && (
+                  <div className="mb-6 space-y-3">
+                    {parseQuestionImages(previewQuestion.question_image_url).map((imgUrl, i) => (
+                      <img
+                        key={i}
+                        src={imgUrl}
+                        alt={`문제 상황 이미지 ${i + 1}`}
+                        className="max-w-full rounded-lg border border-gray-200 shadow-sm"
+                      />
+                    ))}
+                    <p className="text-sm text-gray-500 text-center">위 상황을 보고 답변해주세요.</p>
+                  </div>
+                )}
+
+                {/* 객관식 선택지 */}
+                {previewQuestion.question_type === 'multiple_choice' && previewQuestion.options && (
+                  <div className="space-y-3">
+                    {previewQuestion.options.map((option, index) => {
+                      const isSelected = previewAnswer === index
+                      const isCorrect = index === previewQuestion.correct_answer
+                      const showCorrect = previewSubmitted
+
+                      return (
+                        <button
+                          key={index}
+                          onClick={() => {
+                            if (!previewSubmitted) setPreviewAnswer(index)
+                          }}
+                          disabled={previewSubmitted}
+                          className={`w-full p-4 text-left rounded-lg border-2 transition-all ${
+                            showCorrect && isCorrect
+                              ? 'border-green-500 bg-green-50 text-green-900'
+                              : showCorrect && isSelected && !isCorrect
+                              ? 'border-red-500 bg-red-50 text-red-900'
+                              : isSelected
+                              ? 'border-primary-500 bg-primary-50 text-primary-900'
+                              : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span
+                              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                                showCorrect && isCorrect
+                                  ? 'bg-green-500 text-white'
+                                  : showCorrect && isSelected && !isCorrect
+                                  ? 'bg-red-500 text-white'
+                                  : isSelected
+                                  ? 'bg-primary-500 text-white'
+                                  : 'bg-gray-100 text-gray-600'
+                              }`}
+                            >
+                              {showCorrect && isCorrect ? '✓' : showCorrect && isSelected && !isCorrect ? '✗' : index + 1}
+                            </span>
+                            <span>{option}</span>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* 주관식 답변 영역 */}
+                {previewQuestion.question_type === 'subjective' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        답변 작성
+                      </label>
+                      <textarea
+                        value={previewTextAnswer}
+                        onChange={(e) => {
+                          if (!previewSubmitted) setPreviewTextAnswer(e.target.value)
+                        }}
+                        disabled={previewSubmitted}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none disabled:bg-gray-50"
+                        rows={6}
+                        placeholder="답변을 입력하세요..."
+                      />
+                    </div>
+
+                    {/* 제출 후 모범 답안 표시 */}
+                    {previewSubmitted && previewQuestion.model_answer && (
+                      <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                        <p className="text-sm font-medium text-green-800 mb-2">모범 답안</p>
+                        <p className="text-gray-700 whitespace-pre-wrap">{previewQuestion.model_answer}</p>
+                      </div>
+                    )}
+
+                    {previewSubmitted && previewQuestion.grading_criteria && (
+                      <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                        <p className="text-sm font-medium text-purple-800 mb-2">채점 기준</p>
+                        <p className="text-gray-700 whitespace-pre-wrap">{previewQuestion.grading_criteria}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* 하단 버튼 */}
+              <div className="flex items-center justify-center gap-3">
+                {!previewSubmitted ? (
+                  <button
+                    onClick={() => setPreviewSubmitted(true)}
+                    disabled={
+                      previewQuestion.question_type === 'multiple_choice'
+                        ? previewAnswer === null
+                        : !previewTextAnswer.trim()
+                    }
+                    className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    제출하기
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setPreviewAnswer(null)
+                      setPreviewTextAnswer('')
+                      setPreviewSubmitted(false)
+                    }}
+                    className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                  >
+                    다시 풀기
+                  </button>
+                )}
+                <button
+                  onClick={() => setPreviewQuestion(null)}
+                  className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  닫기
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
