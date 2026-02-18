@@ -399,7 +399,16 @@ export default function MeetingDetail({
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* 브레드크럼 */}
+      {/* 뒤로가기 + 브레드크럼 */}
+      <Link
+        href="/meetings"
+        className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-primary-600 mb-3 group"
+      >
+        <svg className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        </svg>
+        목록으로 돌아가기
+      </Link>
       <div className="flex items-center gap-2 text-sm text-gray-500 mb-6">
         <Link href="/meetings" className="hover:text-primary-600">
           회의 안건방
