@@ -7,8 +7,6 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
 
 type ContentType = 'video' | 'document'
 type Category = '남자_매니저_대화' | '여자_매니저_대화' | '여자_매니저_소개' | '추가_서비스_규칙' | '개인_피드백'
@@ -69,7 +67,6 @@ export default function PostsContent({ posts: initialPosts }: PostsContentProps)
   const [notionUrl, setNotionUrl] = useState('')
   const [notionLoading, setNotionLoading] = useState(false)
   const [notionError, setNotionError] = useState<string | null>(null)
-  const [previewPost, setPreviewPost] = useState<Post | null>(null)
 
   // 서브카테고리 상태
   const [subCategories, setSubCategories] = useState<SubCategory[]>([])
@@ -481,12 +478,12 @@ export default function PostsContent({ posts: initialPosts }: PostsContentProps)
                 {/* 제목 & 정보 */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setPreviewPost(post)}
-                      className="font-medium text-gray-900 truncate hover:text-primary-600 transition-colors text-left"
+                    <Link
+                      href={`/manager/education/${post.id}`}
+                      className="font-medium text-gray-900 truncate hover:text-primary-600 transition-colors"
                     >
                       {post.title}
-                    </button>
+                    </Link>
                     {post.approval_status === 'pending' && (
                       <span className="flex-shrink-0 px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">
                         승인 대기
@@ -643,78 +640,6 @@ export default function PostsContent({ posts: initialPosts }: PostsContentProps)
               <button onClick={() => setShowUnreadModal(false)} className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">
                 닫기
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 게시글 미리보기 모달 */}
-      {previewPost && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] flex flex-col">
-            {/* 헤더 */}
-            <div className="flex items-center justify-between p-5 border-b border-gray-200 flex-shrink-0">
-              <div className="flex-1 min-w-0">
-                <h2 className="text-lg font-semibold text-gray-900 truncate">{previewPost.title}</h2>
-                <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
-                  <span className={`px-2 py-0.5 rounded-full font-medium ${
-                    CATEGORIES.find(c => c.value === previewPost.category)?.bgColor || 'bg-gray-100'
-                  } ${CATEGORIES.find(c => c.value === previewPost.category)?.color || 'text-gray-600'}`}>
-                    {CATEGORIES.find(c => c.value === previewPost.category)?.label}
-                  </span>
-                  {previewPost.sub_category && (
-                    <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">{previewPost.sub_category}</span>
-                  )}
-                  <span>{previewPost.content_type === 'video' ? '동영상' : '문서'}</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 ml-4 flex-shrink-0">
-                <Link
-                  href={`/admin/posts/${previewPost.id}/edit`}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                  수정
-                </Link>
-                <button
-                  onClick={() => setPreviewPost(null)}
-                  className="p-2 text-gray-400 hover:text-gray-600 rounded-lg"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-            {/* 콘텐츠 */}
-            <div className="overflow-y-auto p-6">
-              {previewPost.content_type === 'video' ? (
-                <div className="prose prose-sm max-w-none">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}
-                    components={{
-                      img: ({ node, ...props }) => (
-                        <img {...props} style={{ maxWidth: '100%', height: 'auto', borderRadius: '0.5rem' }} loading="lazy" />
-                      ),
-                    }}
-                  >
-                    {previewPost.content}
-                  </ReactMarkdown>
-                </div>
-              ) : (
-                <div className="prose prose-sm max-w-none">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}
-                    components={{
-                      img: ({ node, ...props }) => (
-                        <img {...props} style={{ maxWidth: '100%', height: 'auto', borderRadius: '0.5rem' }} loading="lazy" />
-                      ),
-                    }}
-                  >
-                    {previewPost.content}
-                  </ReactMarkdown>
-                </div>
-              )}
             </div>
           </div>
         </div>
