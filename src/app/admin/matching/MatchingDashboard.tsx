@@ -378,6 +378,9 @@ export default function MatchingDashboard() {
   const [introInfo, setIntroInfo] = useState<{ name: string; count: number; sheets: number } | null>(null)
   const [matchingInfo, setMatchingInfo] = useState<{ name: string; count: number } | null>(null)
 
+  const [introDragging, setIntroDragging] = useState(false)
+  const [matchingDragging, setMatchingDragging] = useState(false)
+
   const [currentDateBasis, setCurrentDateBasis] = useState<'matching' | 'intro'>('matching')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
@@ -407,11 +410,8 @@ export default function MatchingDashboard() {
     })
   }, [introData, matchingData, startDate, endDate, selectedStaff, aggregation, dayTypeFilter, currentDateBasis])
 
-  // 소개 데이터 업로드
-  const handleIntroUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
+  // 소개 데이터 파일 처리 (클릭/드래그 공용)
+  const processIntroFile = (file: File) => {
     const reader = new FileReader()
     reader.onload = (ev) => {
       try {
@@ -461,11 +461,8 @@ export default function MatchingDashboard() {
     reader.readAsArrayBuffer(file)
   }
 
-  // 매칭 데이터 업로드
-  const handleMatchingUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
+  // 매칭 데이터 파일 처리 (클릭/드래그 공용)
+  const processMatchingFile = (file: File) => {
     const reader = new FileReader()
     reader.onload = (ev) => {
       try {
@@ -480,6 +477,16 @@ export default function MatchingDashboard() {
       }
     }
     reader.readAsArrayBuffer(file)
+  }
+
+  const handleIntroUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) processIntroFile(file)
+  }
+
+  const handleMatchingUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) processMatchingFile(file)
   }
 
   // 엑셀 내보내기
@@ -573,41 +580,81 @@ export default function MatchingDashboard() {
       {/* 파일 업로드 */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
         {/* 소개 데이터 */}
-        <label className={`flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-xl cursor-pointer transition-all ${
-          introInfo ? 'border-green-400 bg-green-50' : 'border-primary-300 bg-white hover:border-primary-500 hover:bg-primary-50'
-        }`}>
+        <label
+          className={`flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-xl cursor-pointer transition-all ${
+            introInfo
+              ? 'border-green-400 bg-green-50'
+              : introDragging
+                ? 'border-violet-500 bg-violet-50 scale-[1.02]'
+                : 'border-primary-300 bg-white hover:border-primary-500 hover:bg-primary-50'
+          }`}
+          onDragOver={(e) => { e.preventDefault(); setIntroDragging(true) }}
+          onDragEnter={(e) => { e.preventDefault(); setIntroDragging(true) }}
+          onDragLeave={() => setIntroDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault()
+            setIntroDragging(false)
+            const file = e.dataTransfer.files[0]
+            if (file) processIntroFile(file)
+          }}
+        >
           <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleIntroUpload} />
-          <div className="text-4xl mb-3">{introInfo ? '✅' : '📄'}</div>
+          <div className="text-4xl mb-3">
+            {introInfo ? '✅' : introDragging ? '📂' : '📄'}
+          </div>
           {introInfo ? (
             <>
               <p className="font-semibold text-green-700">소개 데이터 업로드 완료</p>
               <p className="text-sm text-green-600 mt-1">{introInfo.count.toLocaleString()}건 ({introInfo.sheets}개 시트)</p>
               <p className="text-xs text-green-500 mt-0.5 truncate max-w-full">{introInfo.name}</p>
             </>
+          ) : introDragging ? (
+            <p className="font-semibold text-violet-600">여기에 놓으세요</p>
           ) : (
             <>
               <p className="font-semibold text-gray-700">소개 데이터</p>
               <p className="text-sm text-gray-500 mt-1">임시_데이터.xlsx 업로드</p>
+              <p className="text-xs text-gray-400 mt-1">클릭 또는 드래그&드롭</p>
             </>
           )}
         </label>
 
         {/* 매칭 데이터 */}
-        <label className={`flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-xl cursor-pointer transition-all ${
-          matchingInfo ? 'border-green-400 bg-green-50' : 'border-primary-300 bg-white hover:border-primary-500 hover:bg-primary-50'
-        }`}>
+        <label
+          className={`flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-xl cursor-pointer transition-all ${
+            matchingInfo
+              ? 'border-green-400 bg-green-50'
+              : matchingDragging
+                ? 'border-violet-500 bg-violet-50 scale-[1.02]'
+                : 'border-primary-300 bg-white hover:border-primary-500 hover:bg-primary-50'
+          }`}
+          onDragOver={(e) => { e.preventDefault(); setMatchingDragging(true) }}
+          onDragEnter={(e) => { e.preventDefault(); setMatchingDragging(true) }}
+          onDragLeave={() => setMatchingDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault()
+            setMatchingDragging(false)
+            const file = e.dataTransfer.files[0]
+            if (file) processMatchingFile(file)
+          }}
+        >
           <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleMatchingUpload} />
-          <div className="text-4xl mb-3">{matchingInfo ? '✅' : '✅'}</div>
+          <div className="text-4xl mb-3">
+            {matchingInfo ? '✅' : matchingDragging ? '📂' : '✅'}
+          </div>
           {matchingInfo ? (
             <>
               <p className="font-semibold text-green-700">매칭 데이터 업로드 완료</p>
               <p className="text-sm text-green-600 mt-1">{matchingInfo.count.toLocaleString()}건</p>
               <p className="text-xs text-green-500 mt-0.5 truncate max-w-full">{matchingInfo.name}</p>
             </>
+          ) : matchingDragging ? (
+            <p className="font-semibold text-violet-600">여기에 놓으세요</p>
           ) : (
             <>
               <p className="font-semibold text-gray-700">매칭 데이터</p>
               <p className="text-sm text-gray-500 mt-1">매칭성공.xlsx 업로드</p>
+              <p className="text-xs text-gray-400 mt-1">클릭 또는 드래그&드롭</p>
             </>
           )}
         </label>
