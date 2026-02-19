@@ -1,0 +1,916 @@
+// Created: 2026-02-19 00:00:00
+'use client'
+
+import * as XLSX from 'xlsx'
+import { useState, useMemo, useEffect } from 'react'
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+} from 'chart.js'
+import { Line, Bar } from 'react-chartjs-2'
+
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, Filler)
+
+// =====================================================
+// 상수 (원본 dashboard.html과 동일)
+// =====================================================
+const STAFF = ['영준', '준영', '광해', '세영', '현준', '성미', '민종']
+const INTRO_COMPLETE_STATUS = ['소개 완료', '매크로 완료', '매크로 대기']
+const SIDE_INTRO_VALUES: (string | number)[] = ['완', '역', '4', 4]
+const TALK_INTRO_VALUES: (string | number)[] = ['완', '2', 2]
+const MATCHING_SUCCESS_STATUS = 'N'
+
+// =====================================================
+// 타입
+// =====================================================
+interface StaffStat {
+  side: number
+  talk: number
+  total: number
+}
+
+interface ChangeResult {
+  value: number
+  direction: 'up' | 'down' | 'none'
+}
+
+// =====================================================
+// 유틸리티 함수 (원본 로직 그대로)
+// =====================================================
+
+function inferYearFromMonths(months: number[]): Record<number, number> {
+  const currentDate = new Date()
+  const currentYear = currentDate.getFullYear()
+  const currentMonth = currentDate.getMonth() + 1
+
+  const uniqueMonths = Array.from(new Set(months)).sort((a, b) => a - b)
+  const yearAssignments: Record<number, number> = {}
+
+  uniqueMonths.forEach(month => {
+    if (month > currentMonth + 1) {
+      yearAssignments[month] = currentYear - 1
+    } else if (month >= currentMonth - 2 && month <= currentMonth + 1) {
+      yearAssignments[month] = currentYear
+    } else if (month >= 9) {
+      yearAssignments[month] = currentYear - 1
+    } else {
+      yearAssignments[month] = currentYear
+    }
+  })
+
+  if (uniqueMonths.includes(12) && uniqueMonths.includes(1)) {
+    yearAssignments[12] = currentYear - 1
+    yearAssignments[1] = currentYear
+  }
+
+  const fallMonths = [9, 10, 11, 12].filter(m => uniqueMonths.includes(m))
+  if (fallMonths.length >= 2) {
+    fallMonths.forEach(m => { yearAssignments[m] = currentYear - 1 })
+  }
+
+  return yearAssignments
+}
+
+function formatExcelDate(dateVal: any): string | null {
+  if (!dateVal) return null
+  if (typeof dateVal === 'number') {
+    // Excel 시리얼 날짜 → JS Date 변환
+    const date = new Date((dateVal - 25569) * 86400 * 1000)
+    const y = date.getUTCFullYear()
+    const m = String(date.getUTCMonth() + 1).padStart(2, '0')
+    const d = String(date.getUTCDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+  }
+  return String(dateVal)
+}
+
+function getWeekNumber(dateStr: string): string {
+  const date = new Date(dateStr)
+  const year = date.getFullYear()
+  const firstDay = new Date(year, 0, 1)
+  const daysSince = Math.floor((date.getTime() - firstDay.getTime()) / (1000 * 60 * 60 * 24))
+  const weekNumber = Math.ceil((daysSince + firstDay.getDay() + 1) / 7)
+  return `${year}년 ${weekNumber}주차`
+}
+
+function getMonthKey(dateStr: string): string {
+  const date = new Date(dateStr)
+  return `${date.getFullYear()}년 ${date.getMonth() + 1}월`
+}
+
+function passDateFilter(dateStr: string | null, dayTypeFilter: string): boolean {
+  if (!dateStr) return true
+  if (dayTypeFilter === 'all') return true
+  const day = new Date(dateStr).getDay()
+  if (dayTypeFilter === 'weekday') return day >= 1 && day <= 5
+  if (dayTypeFilter === 'weekend') return day === 0 || day === 6
+  return true
+}
+
+function calcChange(current: number, previous: number): ChangeResult {
+  if (previous === 0) return { value: current > 0 ? 100 : 0, direction: current > 0 ? 'up' : 'none' }
+  const change = (current - previous) / previous * 100
+  return { value: Math.abs(parseFloat(change.toFixed(1))), direction: change >= 0 ? 'up' : 'down' }
+}
+
+// =====================================================
+// 핵심 조인 로직 (원본 analysis/matching.py와 동일)
+// =====================================================
+
+function buildIntroIndex(introData: any[]): Record<string, any> {
+  const introIndex: Record<string, any> = {}
+  introData.forEach(row => {
+    const no = row['NO']
+    const dateStr = row['_date']
+    if (!no || !dateStr) return
+    // 키: "날짜_NO" (예: "2025-02-14_F100102")
+    const key = `${dateStr}_${no}`
+    introIndex[key] = {
+      manager: row['매니저'],
+      staff: row['담당자'],
+      sideIntro: SIDE_INTRO_VALUES.includes(row['한쪽']),
+      talkIntro: TALK_INTRO_VALUES.includes(row['알림톡']),
+      raw: row,
+    }
+  })
+  return introIndex
+}
+
+function joinIntroMatching(introData: any[], matchingData: any[]) {
+  const introIndex = buildIntroIndex(introData)
+  const results: any[] = []
+  let joinSuccess = 0
+  let joinFail = 0
+
+  matchingData.forEach(matchRow => {
+    if (matchRow['처리상태'] !== MATCHING_SUCCESS_STATUS) return
+
+    let introDate = matchRow['소개시점']
+    if (!introDate) { joinFail++; return }
+
+    if (typeof introDate === 'number') {
+      introDate = formatExcelDate(introDate)
+    }
+
+    const noF = matchRow['no.']
+    const noM = matchRow['no..1']
+    const keyF = noF ? `${introDate}_F${noF}` : null
+    const keyM = noM ? `${introDate}_M${noM}` : null
+
+    let introRecord = null
+    let usedKey = null
+
+    if (keyF && introIndex[keyF]) {
+      introRecord = introIndex[keyF]
+      usedKey = keyF
+    } else if (keyM && introIndex[keyM]) {
+      introRecord = introIndex[keyM]
+      usedKey = keyM
+    }
+
+    if (introRecord) {
+      results.push({
+        introRow: introRecord.raw,
+        matchRow,
+        staff: introRecord.staff || '담당자 미지정',
+        manager: introRecord.manager,
+        introDate,
+        matchingDate: formatExcelDate(matchRow['날짜']),
+        joinedKey: usedKey,
+        joinStatus: 'success',
+      })
+      joinSuccess++
+    } else {
+      results.push({
+        introRow: null,
+        matchRow,
+        staff: '찾을 수 없음',
+        manager: null,
+        introDate,
+        matchingDate: formatExcelDate(matchRow['날짜']),
+        joinedKey: null,
+        joinStatus: 'fail',
+      })
+      joinFail++
+    }
+  })
+
+  return { results, joinSuccess, joinFail, totalIndex: Object.keys(introIndex).length }
+}
+
+// =====================================================
+// 전체 데이터 처리 (원본 processData와 동일)
+// =====================================================
+
+function processAllData(params: {
+  introData: any[]
+  matchingData: any[]
+  startDate: string
+  endDate: string
+  selectedStaff: string
+  aggregation: string
+  dayTypeFilter: string
+  currentDateBasis: string
+}) {
+  const { introData, matchingData, startDate, endDate, selectedStaff, aggregation, dayTypeFilter, currentDateBasis } = params
+
+  const { results, joinSuccess, joinFail, totalIndex } = joinIntroMatching(introData, matchingData)
+
+  // 소개 집계
+  const introStats: Record<string, StaffStat> = {}
+  const dailyIntroStats: Record<string, { total: number }> = {}
+
+  introData.forEach(row => {
+    const staff = row['담당자']
+    if (!staff) return
+    const rowDate = row['_date']
+    if (rowDate && (rowDate < startDate || rowDate > endDate)) return
+    if (!passDateFilter(rowDate, dayTypeFilter)) return
+    if (selectedStaff && staff !== selectedStaff) return
+
+    if (!introStats[staff]) introStats[staff] = { side: 0, talk: 0, total: 0 }
+    if (SIDE_INTRO_VALUES.includes(row['한쪽'])) introStats[staff].side++
+    if (TALK_INTRO_VALUES.includes(row['알림톡'])) introStats[staff].talk++
+    if (INTRO_COMPLETE_STATUS.includes(row['가능/불가'])) {
+      introStats[staff].total++
+      if (rowDate) {
+        if (!dailyIntroStats[rowDate]) dailyIntroStats[rowDate] = { total: 0 }
+        dailyIntroStats[rowDate].total++
+      }
+    }
+  })
+
+  // 매칭 집계
+  const matchingStats: Record<string, StaffStat> = {}
+  const dailyMatchingStats: Record<string, StaffStat> = {}
+
+  results.forEach(result => {
+    const staff = result.staff
+    const dateForFilter = currentDateBasis === 'matching' ? result.matchingDate : result.introDate
+    if (dateForFilter && (dateForFilter < startDate || dateForFilter > endDate)) return
+    if (!passDateFilter(dateForFilter, dayTypeFilter)) return
+    if (selectedStaff && staff !== selectedStaff) return
+
+    if (!matchingStats[staff]) matchingStats[staff] = { side: 0, talk: 0, total: 0 }
+    const isTalk = result.matchRow['알림톡'] === 'Y'
+    if (isTalk) { matchingStats[staff].talk++ } else { matchingStats[staff].side++ }
+    matchingStats[staff].total++
+
+    if (dateForFilter) {
+      if (!dailyMatchingStats[dateForFilter]) dailyMatchingStats[dateForFilter] = { side: 0, talk: 0, total: 0 }
+      if (isTalk) { dailyMatchingStats[dateForFilter].talk++ } else { dailyMatchingStats[dateForFilter].side++ }
+      dailyMatchingStats[dateForFilter].total++
+    }
+  })
+
+  // KPI
+  const totalIntro = Object.values(introStats).reduce((s, v) => s + v.total, 0)
+  const totalMatching = Object.values(matchingStats).reduce((s, v) => s + v.total, 0)
+  const matchingRate = totalIntro > 0 ? ((totalMatching / totalIntro) * 100).toFixed(1) : '0.0'
+  const totalMatchingN = matchingData.filter(r => r['처리상태'] === 'N').length
+
+  // 이전 기간 비교
+  const start = new Date(startDate)
+  const end = new Date(endDate)
+  const periodDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
+  const prevEnd = new Date(start)
+  prevEnd.setDate(prevEnd.getDate() - 1)
+  const prevStart = new Date(prevEnd)
+  prevStart.setDate(prevStart.getDate() - periodDays + 1)
+  const prevStartStr = prevStart.toISOString().slice(0, 10)
+  const prevEndStr = prevEnd.toISOString().slice(0, 10)
+
+  let prevIntroTotal = 0
+  introData.forEach(row => {
+    const rowDate = row['_date']
+    if (!rowDate || rowDate < prevStartStr || rowDate > prevEndStr) return
+    if (!passDateFilter(rowDate, dayTypeFilter)) return
+    if (selectedStaff && row['담당자'] !== selectedStaff) return
+    if (INTRO_COMPLETE_STATUS.includes(row['가능/불가'])) prevIntroTotal++
+  })
+
+  let prevMatchingTotal = 0
+  results.forEach(result => {
+    const dateForFilter = currentDateBasis === 'matching' ? result.matchingDate : result.introDate
+    if (!dateForFilter || dateForFilter < prevStartStr || dateForFilter > prevEndStr) return
+    if (!passDateFilter(dateForFilter, dayTypeFilter)) return
+    if (selectedStaff && result.staff !== selectedStaff) return
+    prevMatchingTotal++
+  })
+
+  const prevMatchingRate = prevIntroTotal > 0 ? (prevMatchingTotal / prevIntroTotal) * 100 : 0
+  const periodLabel = aggregation === 'monthly' ? '전월' : aggregation === 'weekly' ? '전주' : '이전'
+
+  // 트렌드 차트 데이터 (집계 단위 적용)
+  const allDates = new Set([...Object.keys(dailyMatchingStats), ...Object.keys(dailyIntroStats)])
+  const aggregated: Record<string, { intro: number; matching: number }> = {}
+  allDates.forEach(date => {
+    let key: string
+    if (aggregation === 'daily') key = date
+    else if (aggregation === 'weekly') key = getWeekNumber(date)
+    else key = getMonthKey(date)
+    if (!aggregated[key]) aggregated[key] = { intro: 0, matching: 0 }
+    aggregated[key].intro += dailyIntroStats[date]?.total || 0
+    aggregated[key].matching += dailyMatchingStats[date]?.total || 0
+  })
+  const sortedKeys = Object.keys(aggregated).sort()
+
+  // 담당자 차트 데이터
+  const allStaffSet = new Set([...Object.keys(matchingStats), ...Object.keys(introStats)])
+  const staffList = Array.from(allStaffSet)
+    .sort((a, b) => (introStats[b]?.total || 0) - (introStats[a]?.total || 0))
+    .slice(0, 10)
+
+  // 테이블 & 랭킹
+  const tableStaff = Array.from(allStaffSet).sort((a, b) => (introStats[b]?.total || 0) - (introStats[a]?.total || 0))
+  const rankingStaff = Object.keys(matchingStats)
+    .filter(s => s !== '찾을 수 없음')
+    .sort((a, b) => matchingStats[b].total - matchingStats[a].total)
+    .slice(0, 3)
+
+  return {
+    introStats,
+    matchingStats,
+    dailyIntroStats,
+    dailyMatchingStats,
+    trendChart: {
+      labels: sortedKeys,
+      introValues: sortedKeys.map(k => aggregated[k].intro),
+      matchingValues: sortedKeys.map(k => aggregated[k].matching),
+    },
+    staffChart: {
+      labels: staffList,
+      matchingValues: staffList.map(s => matchingStats[s]?.total || 0),
+      introValues: staffList.map(s => introStats[s]?.total || 0),
+    },
+    tableStaff,
+    rankingStaff,
+    kpi: {
+      totalIntro,
+      totalMatching,
+      matchingRate,
+      joinSuccess,
+      totalMatchingN,
+      introChange: calcChange(totalIntro, prevIntroTotal),
+      matchingChange: calcChange(totalMatching, prevMatchingTotal),
+      rateChange: calcChange(parseFloat(matchingRate), prevMatchingRate),
+      periodLabel,
+    },
+    debug: { totalIndex, joinSuccess, joinFail, totalMatchingN },
+  }
+}
+
+// =====================================================
+// 컴포넌트
+// =====================================================
+
+export default function MatchingDashboard() {
+  const [introData, setIntroData] = useState<any[] | null>(null)
+  const [matchingData, setMatchingData] = useState<any[] | null>(null)
+  const [introInfo, setIntroInfo] = useState<{ name: string; count: number; sheets: number } | null>(null)
+  const [matchingInfo, setMatchingInfo] = useState<{ name: string; count: number } | null>(null)
+
+  const [currentDateBasis, setCurrentDateBasis] = useState<'matching' | 'intro'>('matching')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+  const [selectedStaff, setSelectedStaff] = useState('')
+  const [aggregation, setAggregation] = useState('daily')
+  const [dayTypeFilter, setDayTypeFilter] = useState('all')
+
+  // 매칭 데이터 로드 시 날짜 초기화
+  useEffect(() => {
+    if (matchingData) {
+      const dates = matchingData
+        .map((row: any) => formatExcelDate(row['날짜']))
+        .filter(Boolean) as string[]
+      if (dates.length > 0) {
+        dates.sort()
+        setStartDate(dates[0])
+        setEndDate(dates[dates.length - 1])
+      }
+    }
+  }, [matchingData])
+
+  const processedData = useMemo(() => {
+    if (!introData || !matchingData || !startDate || !endDate) return null
+    return processAllData({
+      introData, matchingData, startDate, endDate,
+      selectedStaff, aggregation, dayTypeFilter, currentDateBasis,
+    })
+  }, [introData, matchingData, startDate, endDate, selectedStaff, aggregation, dayTypeFilter, currentDateBasis])
+
+  // 소개 데이터 업로드
+  const handleIntroUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      try {
+        const data = new Uint8Array(ev.target!.result as ArrayBuffer)
+        const workbook = XLSX.read(data, { type: 'array' })
+
+        const sheetMonths: number[] = []
+        workbook.SheetNames.forEach(sheetName => {
+          const match = sheetName.match(/(\d{1,2})\.(\d{1,2})/)
+          if (match) sheetMonths.push(parseInt(match[1]))
+        })
+
+        const yearAssignments = inferYearFromMonths(sheetMonths)
+
+        let allData: any[] = []
+        let totalSheets = 0
+
+        workbook.SheetNames.forEach(sheetName => {
+          const sheet = workbook.Sheets[sheetName]
+          const sheetData: any[] = XLSX.utils.sheet_to_json(sheet)
+          const match = sheetName.match(/(\d{1,2})\.(\d{1,2})/)
+          let sheetDate: string | null = null
+
+          if (match) {
+            const month = parseInt(match[1])
+            const day = parseInt(match[2])
+            const year = yearAssignments[month] || new Date().getFullYear()
+            sheetDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+          }
+
+          const validData = sheetData
+            .filter(row => row.NO && String(row.NO).trim())
+            .map(row => ({ ...row, _date: sheetDate }))
+
+          if (validData.length > 0) {
+            allData = allData.concat(validData)
+            totalSheets++
+          }
+        })
+
+        setIntroData(allData)
+        setIntroInfo({ name: file.name, count: allData.length, sheets: totalSheets })
+      } catch (err: any) {
+        alert('소개 데이터 업로드 실패: ' + err.message)
+      }
+    }
+    reader.readAsArrayBuffer(file)
+  }
+
+  // 매칭 데이터 업로드
+  const handleMatchingUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      try {
+        const data = new Uint8Array(ev.target!.result as ArrayBuffer)
+        const workbook = XLSX.read(data, { type: 'array' })
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
+        const parsed: any[] = XLSX.utils.sheet_to_json(firstSheet)
+        setMatchingData(parsed)
+        setMatchingInfo({ name: file.name, count: parsed.length })
+      } catch (err: any) {
+        alert('매칭 데이터 업로드 실패: ' + err.message)
+      }
+    }
+    reader.readAsArrayBuffer(file)
+  }
+
+  // 엑셀 내보내기
+  const handleExportToExcel = () => {
+    if (!processedData) { alert('데이터를 먼저 업로드해주세요.'); return }
+
+    const { introStats, matchingStats, dailyIntroStats, dailyMatchingStats, rankingStaff } = processedData
+    const wb = XLSX.utils.book_new()
+
+    // 요약 시트
+    const medals = ['🥇', '🥈', '🥉']
+    const summaryData: any[][] = [
+      ['매칭 성과 분석 리포트'], [],
+      ['기간', `${startDate} ~ ${endDate}`],
+      ['집계 단위', aggregation], ['요일 필터', dayTypeFilter], [],
+      ['총 소개 수', Object.values(introStats).reduce((s, v) => s + v.total, 0)],
+      ['총 매칭 수', Object.values(matchingStats).reduce((s, v) => s + v.total, 0)],
+      [], ['담당자 랭킹 Top 3'],
+    ]
+    rankingStaff.forEach((staff, idx) => {
+      const mStat = matchingStats[staff]
+      const iStat = introStats[staff] || { total: 0 }
+      const rate = iStat.total > 0 ? ((mStat.total / iStat.total) * 100).toFixed(1) : 0
+      summaryData.push([`${medals[idx]} ${staff}`, `매칭 ${mStat.total}건`, `소개 ${iStat.total}건`, `${rate}%`])
+    })
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryData), '요약')
+
+    // 담당자별 상세
+    const staffData: any[][] = [['담당자', '한쪽 소개', '알림톡 소개', '총 소개', '한쪽 매칭', '알림톡 매칭', '총 매칭', '매칭률(%)']]
+    const allStaff = new Set([...Object.keys(matchingStats), ...Object.keys(introStats)])
+    Array.from(allStaff).sort((a, b) => (introStats[b]?.total || 0) - (introStats[a]?.total || 0)).forEach(staff => {
+      const mStat = matchingStats[staff] || { side: 0, talk: 0, total: 0 }
+      const iStat = introStats[staff] || { side: 0, talk: 0, total: 0 }
+      const rate = iStat.total > 0 ? ((mStat.total / iStat.total) * 100).toFixed(1) : 0
+      staffData.push([staff, iStat.side, iStat.talk, iStat.total, mStat.side, mStat.talk, mStat.total, rate])
+    })
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(staffData), '담당자별 상세')
+
+    // 일별 트렌드
+    const trendData: any[][] = [['날짜', '소개 수', '매칭 수', '매칭률(%)']]
+    const allDates = new Set([...Object.keys(dailyIntroStats), ...Object.keys(dailyMatchingStats)])
+    Array.from(allDates).sort().forEach(date => {
+      const intro = dailyIntroStats[date]?.total || 0
+      const matching = dailyMatchingStats[date]?.total || 0
+      const rate = intro > 0 ? ((matching / intro) * 100).toFixed(1) : 0
+      trendData.push([date, intro, matching, rate])
+    })
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(trendData), '일별 트렌드')
+
+    const today = new Date().toISOString().slice(0, 10)
+    XLSX.writeFile(wb, `매칭분석_${today}.xlsx`)
+  }
+
+  const isDataReady = !!(introData && matchingData)
+
+  const changeIcon = (c: ChangeResult) => {
+    if (c.direction === 'none') return null
+    return c.direction === 'up'
+      ? <span className="text-green-300">▲ {c.value}%</span>
+      : <span className="text-red-300">▼ {c.value}%</span>
+  }
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* 페이지 헤더 */}
+      <div className="mb-6">
+        <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
+          <span className="hover:text-primary-600 cursor-pointer" onClick={() => window.location.href = '/admin'}>대시보드</span>
+          <span>/</span>
+          <span>소개성과측정</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">소개 성과 측정</h1>
+            <p className="mt-1 text-sm text-gray-500">팅팅팅 소개팅 앱 · 매칭 성과 분석</p>
+          </div>
+          {isDataReady && (
+            <button
+              onClick={handleExportToExcel}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              엑셀 다운로드
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 파일 업로드 */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+        {/* 소개 데이터 */}
+        <label className={`flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-xl cursor-pointer transition-all ${
+          introInfo ? 'border-green-400 bg-green-50' : 'border-primary-300 bg-white hover:border-primary-500 hover:bg-primary-50'
+        }`}>
+          <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleIntroUpload} />
+          <div className="text-4xl mb-3">{introInfo ? '✅' : '📄'}</div>
+          {introInfo ? (
+            <>
+              <p className="font-semibold text-green-700">소개 데이터 업로드 완료</p>
+              <p className="text-sm text-green-600 mt-1">{introInfo.count.toLocaleString()}건 ({introInfo.sheets}개 시트)</p>
+              <p className="text-xs text-green-500 mt-0.5 truncate max-w-full">{introInfo.name}</p>
+            </>
+          ) : (
+            <>
+              <p className="font-semibold text-gray-700">소개 데이터</p>
+              <p className="text-sm text-gray-500 mt-1">임시_데이터.xlsx 업로드</p>
+            </>
+          )}
+        </label>
+
+        {/* 매칭 데이터 */}
+        <label className={`flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-xl cursor-pointer transition-all ${
+          matchingInfo ? 'border-green-400 bg-green-50' : 'border-primary-300 bg-white hover:border-primary-500 hover:bg-primary-50'
+        }`}>
+          <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleMatchingUpload} />
+          <div className="text-4xl mb-3">{matchingInfo ? '✅' : '✅'}</div>
+          {matchingInfo ? (
+            <>
+              <p className="font-semibold text-green-700">매칭 데이터 업로드 완료</p>
+              <p className="text-sm text-green-600 mt-1">{matchingInfo.count.toLocaleString()}건</p>
+              <p className="text-xs text-green-500 mt-0.5 truncate max-w-full">{matchingInfo.name}</p>
+            </>
+          ) : (
+            <>
+              <p className="font-semibold text-gray-700">매칭 데이터</p>
+              <p className="text-sm text-gray-500 mt-1">매칭성공.xlsx 업로드</p>
+            </>
+          )}
+        </label>
+      </div>
+
+      {/* 안내 메시지 (데이터 미업로드 시) */}
+      {!isDataReady && (
+        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+          <div className="text-5xl mb-4">📊</div>
+          <p className="text-gray-500">소개 데이터와 매칭 데이터를 모두 업로드하면 분석이 시작됩니다.</p>
+        </div>
+      )}
+
+      {/* 필터 (데이터 로드 후) */}
+      {isDataReady && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 items-end">
+            {/* 기준 날짜 토글 */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase">기준 날짜</label>
+              <button
+                onClick={() => setCurrentDateBasis(b => b === 'matching' ? 'intro' : 'matching')}
+                className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  currentDateBasis === 'matching'
+                    ? 'bg-primary-600 text-white'
+                    : 'bg-green-600 text-white'
+                }`}
+              >
+                {currentDateBasis === 'matching' ? '매칭 날짜 기준' : '소개 날짜 기준'}
+              </button>
+            </div>
+
+            {/* 시작 날짜 */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase">시작 날짜</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={e => setStartDate(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              />
+            </div>
+
+            {/* 종료 날짜 */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase">종료 날짜</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={e => setEndDate(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              />
+            </div>
+
+            {/* 담당자 */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase">담당자</label>
+              <select
+                value={selectedStaff}
+                onChange={e => setSelectedStaff(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              >
+                <option value="">전체</option>
+                {STAFF.map(s => <option key={s} value={s}>{s}</option>)}
+                <option value="찾을 수 없음">찾을 수 없음</option>
+              </select>
+            </div>
+
+            {/* 집계 단위 */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase">집계 단위</label>
+              <select
+                value={aggregation}
+                onChange={e => setAggregation(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              >
+                <option value="daily">일별</option>
+                <option value="weekly">주별</option>
+                <option value="monthly">월별</option>
+              </select>
+            </div>
+
+            {/* 요일 필터 */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase">요일 필터</label>
+              <select
+                value={dayTypeFilter}
+                onChange={e => setDayTypeFilter(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              >
+                <option value="all">전체</option>
+                <option value="weekday">평일만</option>
+                <option value="weekend">주말만</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 대시보드 */}
+      {processedData && (
+        <div className="space-y-6">
+          {/* KPI 카드 */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {[
+              {
+                label: '총 소개 수',
+                value: processedData.kpi.totalIntro.toLocaleString(),
+                change: processedData.kpi.introChange,
+                suffix: processedData.kpi.periodLabel + ' 대비',
+              },
+              {
+                label: '총 매칭 수',
+                value: processedData.kpi.totalMatching.toLocaleString(),
+                change: processedData.kpi.matchingChange,
+                suffix: processedData.kpi.periodLabel + ' 대비',
+              },
+              {
+                label: '매칭률',
+                value: processedData.kpi.matchingRate + '%',
+                change: processedData.kpi.rateChange,
+                suffix: processedData.kpi.periodLabel + ' 대비',
+              },
+              {
+                label: '조인 성공',
+                value: processedData.kpi.joinSuccess.toLocaleString(),
+                change: null,
+                suffix: `전체 ${processedData.kpi.totalMatchingN}건 중`,
+              },
+            ].map((kpi) => (
+              <div key={kpi.label} className="bg-gradient-to-br from-violet-500 to-purple-700 text-white rounded-xl p-5 shadow-md">
+                <p className="text-sm opacity-90 mb-2">{kpi.label}</p>
+                <p className="text-3xl font-bold mb-1">{kpi.value}</p>
+                <p className="text-xs opacity-80">
+                  {kpi.change && kpi.change.direction !== 'none' ? (
+                    <>{changeIcon(kpi.change)} {kpi.suffix}</>
+                  ) : kpi.suffix}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          {/* 담당자 랭킹 Top 3 */}
+          {processedData.rankingStaff.length > 0 && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">🏆 담당자 랭킹 Top 3</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {processedData.rankingStaff.map((staff, idx) => {
+                  const mStat = processedData.matchingStats[staff]
+                  const iStat = processedData.introStats[staff] || { total: 0 }
+                  const rate = iStat.total > 0 ? ((mStat.total / iStat.total) * 100).toFixed(1) : 0
+                  const medals = ['🥇', '🥈', '🥉']
+                  const borders = [
+                    'border-yellow-400 bg-gradient-to-br from-yellow-50 to-yellow-100',
+                    'border-gray-400 bg-gradient-to-br from-gray-50 to-gray-100',
+                    'border-orange-400 bg-gradient-to-br from-orange-50 to-orange-100',
+                  ]
+                  return (
+                    <div key={staff} className={`rounded-xl border-2 p-5 text-center ${borders[idx]}`}>
+                      <div className="text-4xl mb-2">{medals[idx]}</div>
+                      <div className="text-xl font-bold text-gray-800 mb-1">{staff}</div>
+                      <div className="text-sm text-gray-600">
+                        매칭 <span className="font-semibold text-violet-600">{mStat.total}건</span>
+                        <br />
+                        소개 {iStat.total}건 · 매칭률 {rate}%
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* 트렌드 차트 */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">📈 트렌드 차트</h2>
+            <div style={{ height: 350 }}>
+              <Line
+                data={{
+                  labels: processedData.trendChart.labels,
+                  datasets: [
+                    {
+                      label: '소개',
+                      data: processedData.trendChart.introValues,
+                      borderColor: '#f093fb',
+                      backgroundColor: 'rgba(240, 147, 251, 0.1)',
+                      tension: 0.4,
+                      fill: true,
+                      borderDash: [5, 5],
+                    },
+                    {
+                      label: '매칭',
+                      data: processedData.trendChart.matchingValues,
+                      borderColor: '#7c3aed',
+                      backgroundColor: 'rgba(124, 58, 237, 0.1)',
+                      tension: 0.4,
+                      fill: true,
+                      borderWidth: 2,
+                    },
+                  ],
+                }}
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: { legend: { position: 'top' } },
+                  scales: { y: { beginAtZero: true } },
+                }}
+              />
+            </div>
+          </div>
+
+          {/* 담당자별 성과 차트 */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">👥 담당자별 성과</h2>
+            <div style={{ height: 350 }}>
+              <Bar
+                data={{
+                  labels: processedData.staffChart.labels,
+                  datasets: [
+                    {
+                      label: '매칭',
+                      data: processedData.staffChart.matchingValues,
+                      backgroundColor: 'rgba(124, 58, 237, 0.8)',
+                    },
+                    {
+                      label: '소개',
+                      data: processedData.staffChart.introValues,
+                      backgroundColor: 'rgba(167, 139, 250, 0.5)',
+                    },
+                  ],
+                }}
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: { legend: { position: 'top' } },
+                  scales: { y: { beginAtZero: true } },
+                }}
+              />
+            </div>
+          </div>
+
+          {/* 담당자별 상세 테이블 */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">📋 담당자별 상세 통계</h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gradient-to-r from-violet-500 to-purple-700 text-white">
+                  <tr>
+                    {['담당자', '한쪽 소개', '알림톡 소개', '총 소개', '한쪽 매칭', '알림톡 매칭', '총 매칭', '매칭률'].map(h => (
+                      <th key={h} className="px-4 py-3 text-left text-sm font-semibold">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {processedData.tableStaff.map(staff => {
+                    const mStat = processedData.matchingStats[staff] || { side: 0, talk: 0, total: 0 }
+                    const iStat = processedData.introStats[staff] || { side: 0, talk: 0, total: 0 }
+                    const rate = iStat.total > 0 ? ((mStat.total / iStat.total) * 100).toFixed(1) : '0.0'
+                    const rateNum = parseFloat(rate)
+                    const badgeColor = rateNum >= 30
+                      ? 'bg-green-100 text-green-700'
+                      : rateNum >= 15
+                        ? 'bg-yellow-100 text-yellow-700'
+                        : 'bg-red-100 text-red-700'
+                    return (
+                      <tr key={staff} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-3 font-semibold text-gray-900">{staff}</td>
+                        <td className="px-4 py-3 text-gray-600">{iStat.side}</td>
+                        <td className="px-4 py-3 text-gray-600">{iStat.talk}</td>
+                        <td className="px-4 py-3 font-medium text-gray-900">{iStat.total}</td>
+                        <td className="px-4 py-3 text-gray-600">{mStat.side}</td>
+                        <td className="px-4 py-3 text-gray-600">{mStat.talk}</td>
+                        <td className="px-4 py-3 font-medium text-gray-900">{mStat.total}</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${badgeColor}`}>
+                            {rate}%
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* 디버그 정보 */}
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-sm text-gray-500 font-mono">
+            <span className="font-semibold text-gray-600">🔍 조인 디버그 정보</span>
+            <span className="ml-4">
+              소개 인덱스: {processedData.debug.totalIndex.toLocaleString()}건 |{' '}
+              매칭(N): {processedData.debug.totalMatchingN.toLocaleString()}건 |{' '}
+              조인 성공: {processedData.debug.joinSuccess.toLocaleString()}건 |{' '}
+              조인 실패: {processedData.debug.joinFail.toLocaleString()}건 |{' '}
+              성공률: {processedData.debug.totalMatchingN > 0
+                ? ((processedData.debug.joinSuccess / processedData.debug.totalMatchingN) * 100).toFixed(1)
+                : 0}%
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

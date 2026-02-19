@@ -35,6 +35,7 @@ export default function Header({ userName, userRole }: HeaderProps) {
     { href: '/admin/tests', label: '테스트 관리' },
     { href: '/admin/users', label: '사용자 관리' },
     { href: '/meetings', label: '회의 안건방' },
+    { href: '/admin/matching', label: '소개성과측정' },
   ]
 
   const navItems = userRole === 'admin' ? adminNavItems : managerNavItems
