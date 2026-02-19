@@ -101,6 +101,8 @@ export default function MeetingDetail({
   const totalVotes = localOptions.reduce((sum, opt) => sum + opt.vote_count, 0)
 
   const canDelete = post.author_id === currentUserId || userRole === 'admin'
+  const canEdit = post.author_id === currentUserId || userRole === 'admin'
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
 
   // 데드라인 헬퍼
   const getDaysUntilDeadline = (deadline: string | null): number | null => {
@@ -513,6 +515,18 @@ export default function MeetingDetail({
                 )}
                 완료
               </button>
+              {canEdit && (
+                <Link
+                  href={`/meetings/${post.id}/edit`}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-colors"
+                  title="수정"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  수정
+                </Link>
+              )}
               {canDelete && (
                 <button
                   onClick={handleDeletePost}
@@ -532,8 +546,20 @@ export default function MeetingDetail({
         <div className="p-6">
           {/* 자유 게시글: 마크다운 렌더링 */}
           {post.post_type === 'free' && post.content && (
-            <div className="prose prose-sm max-w-none">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            <div className="markdown-content max-w-none">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  img: ({ node, ...props }) => (
+                    <img
+                      {...props}
+                      className="block max-w-full h-auto rounded-lg my-6 shadow-md cursor-zoom-in mx-auto"
+                      loading="lazy"
+                      onClick={(e) => setLightboxSrc((e.target as HTMLImageElement).src)}
+                    />
+                  ),
+                }}
+              >
                 {post.content}
               </ReactMarkdown>
             </div>
@@ -541,15 +567,16 @@ export default function MeetingDetail({
 
           {/* 투표: 설명 + 투표 UI */}
           {post.post_type === 'poll' && post.content && (
-            <div className="mb-6 prose prose-sm max-w-none">
+            <div className="mb-6 markdown-content max-w-none">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{
                   img: ({ node, ...props }) => (
                     <img
                       {...props}
-                      style={{ maxWidth: '100%', height: 'auto', borderRadius: '0.5rem' }}
+                      className="block max-w-full h-auto rounded-lg my-6 shadow-md cursor-zoom-in mx-auto"
                       loading="lazy"
+                      onClick={(e) => setLightboxSrc((e.target as HTMLImageElement).src)}
                     />
                   ),
                 }}
@@ -826,6 +853,30 @@ export default function MeetingDetail({
           </div>
         </div>
       </div>
+
+      {/* 이미지 확대 모달 */}
+      {lightboxSrc && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+          onClick={() => setLightboxSrc(null)}
+        >
+          <div className="relative max-w-5xl max-h-full" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={lightboxSrc}
+              alt="확대 이미지"
+              className="max-w-full max-h-[90vh] rounded-lg shadow-2xl object-contain"
+            />
+            <button
+              className="absolute -top-3 -right-3 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-lg text-gray-600 hover:text-gray-900"
+              onClick={() => setLightboxSrc(null)}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 교육 자료 복사 모달 */}
       {showCopyModal && (

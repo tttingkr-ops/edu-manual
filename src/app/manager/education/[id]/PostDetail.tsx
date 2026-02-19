@@ -75,6 +75,7 @@ export default function PostDetail({
   const [showRelatedTests, setShowRelatedTests] = useState(false)
   const [isDeletingPost, setIsDeletingPost] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
 
   // Comment state
   const [newComment, setNewComment] = useState('')
@@ -369,15 +370,16 @@ export default function PostDetail({
             </div>
           ) : (
             // 문서 콘텐츠 (마크다운)
-            <div className="markdown-content prose prose-gray max-w-none">
+            <div className="markdown-content max-w-none">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{
                   img: ({ node, ...props }) => (
                     <img
                       {...props}
-                      style={{ maxWidth: '100%', height: 'auto', borderRadius: '0.5rem' }}
+                      className="block max-w-full h-auto rounded-lg my-6 shadow-md cursor-zoom-in mx-auto"
                       loading="lazy"
+                      onClick={(e) => setLightboxSrc((e.target as HTMLImageElement).src)}
                     />
                   ),
                 }}
@@ -620,6 +622,30 @@ export default function PostDetail({
           이 교육 자료를 확인하셨습니다. 학습 현황에 반영됩니다.
         </p>
       </div>
+
+      {/* 이미지 확대 모달 */}
+      {lightboxSrc && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+          onClick={() => setLightboxSrc(null)}
+        >
+          <div className="relative max-w-5xl max-h-full" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={lightboxSrc}
+              alt="확대 이미지"
+              className="max-w-full max-h-[90vh] rounded-lg shadow-2xl object-contain"
+            />
+            <button
+              className="absolute -top-3 -right-3 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-lg text-gray-600 hover:text-gray-900"
+              onClick={() => setLightboxSrc(null)}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 삭제 확인 모달 */}
       {showDeleteConfirm && (

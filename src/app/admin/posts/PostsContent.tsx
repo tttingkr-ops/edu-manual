@@ -25,12 +25,15 @@ interface Post {
   content: string
   category: Category
   sub_category: string | null
+  targeting_type?: 'group' | 'individual'
   created_at: string
   updated_at: string
   author_id: string
   unreadCount: number
   unreadManagers: UnreadManager[]
   approval_status?: 'approved' | 'pending'
+  targetGroups?: string[]
+  targetUsers?: { username: string; nickname: string | null }[]
 }
 
 interface SubCategory {
@@ -490,12 +493,31 @@ export default function PostsContent({ posts: initialPosts }: PostsContentProps)
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
+                  <div className="flex items-center gap-2 mt-1 text-sm text-gray-500 flex-wrap">
                     <span>{formatDate(post.created_at)}</span>
                     <span>{post.content_type === 'video' ? '동영상' : '문서'}</span>
                     {post.sub_category && (
                       <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">
                         {post.sub_category}
+                      </span>
+                    )}
+                    {/* 그룹 지정 대상 */}
+                    {post.targeting_type === 'group' && post.targetGroups && post.targetGroups.length > 0 && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 text-indigo-700 text-xs rounded-full">
+                        <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        {post.targetGroups.join(' · ')}
+                      </span>
+                    )}
+                    {/* 개인 지정 대상 */}
+                    {post.targeting_type === 'individual' && post.targetUsers && post.targetUsers.length > 0 && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-violet-50 text-violet-700 text-xs rounded-full">
+                        <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                        {post.targetUsers.slice(0, 3).map(u => u.nickname || u.username).join(' · ')}
+                        {post.targetUsers.length > 3 && ` +${post.targetUsers.length - 3}명`}
                       </span>
                     )}
                   </div>
