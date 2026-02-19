@@ -393,13 +393,6 @@ export default function PostDetail({
 
       {/* 하단 액션 버튼들 */}
       <div className="mt-6 flex flex-col sm:flex-row gap-4">
-        <Link
-          href="/manager/education"
-          className="flex-1 px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg text-center transition-colors"
-        >
-          목록으로
-        </Link>
-
         {hasRelatedTest && (
           <button
             onClick={() => setShowRelatedTests(!showRelatedTests)}
