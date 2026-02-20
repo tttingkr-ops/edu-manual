@@ -752,6 +752,69 @@ export interface Database {
           }
         ];
       };
+      intro_records: {
+        Row: {
+          id: number;
+          record_date: string;
+          no_code: string;
+          staff: string | null;
+          manager: string | null;
+          raw_data: Json | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: number;
+          record_date: string;
+          no_code: string;
+          staff?: string | null;
+          manager?: string | null;
+          raw_data?: Json | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: number;
+          record_date?: string;
+          no_code?: string;
+          staff?: string | null;
+          manager?: string | null;
+          raw_data?: Json | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      matching_records: {
+        Row: {
+          id: number;
+          matching_date: string | null;
+          intro_date: string;
+          no_f: string;
+          no_m: string;
+          process_status: string | null;
+          raw_data: Json | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: number;
+          matching_date?: string | null;
+          intro_date?: string;
+          no_f?: string;
+          no_m?: string;
+          process_status?: string | null;
+          raw_data?: Json | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: number;
+          matching_date?: string | null;
+          intro_date?: string;
+          no_f?: string;
+          no_m?: string;
+          process_status?: string | null;
+          raw_data?: Json | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       user_reading_progress: {
