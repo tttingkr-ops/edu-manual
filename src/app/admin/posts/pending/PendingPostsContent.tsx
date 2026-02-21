@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import rehypeRaw from 'rehype-raw'
 import { createClient } from '@/lib/supabase/client'
 
 interface PendingPost {
@@ -15,6 +16,7 @@ interface PendingPost {
   content: string
   category: string
   sub_category: string | null
+  targeting_type?: 'group' | 'individual'
   created_at: string
   author_id: string
   author_name: string
@@ -149,7 +151,10 @@ export default function PendingPostsContent({ posts: initialPosts }: PendingPost
                     </div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-1">{post.title}</h3>
                     <div className="flex items-center gap-3 text-sm text-gray-500">
-                      <span>작성자: <span className="font-medium text-gray-700">{post.author_name}</span></span>
+                      <span>
+                        {post.targeting_type === 'individual' ? '수신자' : '작성자'}:{' '}
+                        <span className="font-medium text-gray-700">{post.author_name}</span>
+                      </span>
                       <span>{formatDate(post.created_at)}</span>
                     </div>
                   </div>
@@ -173,6 +178,7 @@ export default function PendingPostsContent({ posts: initialPosts }: PendingPost
                   <div className="markdown-content prose prose-sm max-w-none bg-gray-50 p-4 rounded-lg max-h-96 overflow-y-auto">
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
+                      rehypePlugins={[rehypeRaw]}
                       components={{
                         img: ({ node, ...props }) => (
                           <img

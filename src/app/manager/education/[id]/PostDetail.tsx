@@ -17,6 +17,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import rehypeRaw from 'rehype-raw'
 import { createClient } from '@/lib/supabase/client'
 
 interface Post {
@@ -373,6 +374,7 @@ export default function PostDetail({
             <div className="markdown-content max-w-none">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeRaw]}
                 components={{
                   img: ({ node, ...props }) => (
                     <img

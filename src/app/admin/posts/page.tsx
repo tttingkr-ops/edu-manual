@@ -7,13 +7,14 @@ import PostsContent from './PostsContent'
 export default async function PostsPage() {
   const supabase = await createClient()
 
-  // 모든 교육 게시물 + 읽음 상태 + 대상 지정 조회
+  // 모든 교육 게시물 + 읽음 상태 + 대상 지정 + 댓글 수 조회
   const [
     { data: posts },
     { data: readStatuses },
     { data: allManagers },
     { data: postGroups },
     { data: postTargetUsers },
+    { data: commentCounts },
   ] = await Promise.all([
     supabase
       .from('educational_posts')
@@ -32,6 +33,9 @@ export default async function PostsPage() {
     supabase
       .from('post_target_users')
       .select('post_id, user_id'),
+    supabase
+      .from('education_comments')
+      .select('post_id'),
   ])
 
   // 각 게시물별 미확인 매니저 + 대상 지정 계산
@@ -56,12 +60,15 @@ export default async function PostsPage() {
       .filter(m => targetUserIds.includes(m.id))
       .map(m => ({ username: m.username, nickname: (m as any).nickname as string | null }))
 
+    const commentCount = (commentCounts || []).filter(c => c.post_id === post.id).length
+
     return {
       ...post,
       unreadCount: unreadManagers.length,
       unreadManagers: unreadManagers,
       targetGroups,
       targetUsers,
+      comment_count: commentCount,
     }
   })
 

@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import rehypeRaw from 'rehype-raw'
 
 interface MeetingPost {
   id: string
@@ -549,6 +550,7 @@ export default function MeetingDetail({
             <div className="markdown-content max-w-none">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeRaw]}
                 components={{
                   img: ({ node, ...props }) => (
                     <img
@@ -570,6 +572,7 @@ export default function MeetingDetail({
             <div className="mb-6 markdown-content max-w-none">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeRaw]}
                 components={{
                   img: ({ node, ...props }) => (
                     <img

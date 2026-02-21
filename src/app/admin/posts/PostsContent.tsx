@@ -30,6 +30,7 @@ interface Post {
   unreadCount: number
   unreadManagers: UnreadManager[]
   approval_status?: 'approved' | 'pending'
+  comment_count?: number
   targetGroups?: string[]
   targetUsers?: { username: string; nickname: string | null }[]
 }
@@ -496,6 +497,15 @@ export default function PostsContent({ posts: initialPosts }: PostsContentProps)
                     {post.sub_category && (
                       <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">
                         {post.sub_category}
+                      </span>
+                    )}
+                    {/* 댓글 수 */}
+                    {post.comment_count !== undefined && post.comment_count > 0 && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                        </svg>
+                        {post.comment_count}
                       </span>
                     )}
                     {/* 그룹 지정 대상 */}

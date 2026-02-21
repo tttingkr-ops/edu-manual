@@ -139,6 +139,7 @@ function MarkdownEditor({
   const focusBlockIdRef = useRef<string | null>(null)
   const blocksContainerRef = useRef<HTMLDivElement>(null)
   const textareaRefsMap = useRef<Map<string, HTMLTextAreaElement>>(new Map())
+  const activeFocusedBlockRef = useRef<string | null>(null)
   const supabase = useMemo(() => createClient(), [])
 
   // 외부 value 변경 시 동기화 (내부 변경은 무시)
@@ -186,9 +187,9 @@ function MarkdownEditor({
       return null
     }
 
-    const maxSize = 10 * 1024 * 1024
+    const maxSize = 50 * 1024 * 1024
     if (file.size > maxSize) {
-      alert('파일 크기는 10MB 이하여야 합니다.')
+      alert('파일 크기는 50MB 이하여야 합니다.')
       return null
     }
 
@@ -505,6 +506,38 @@ function MarkdownEditor({
     e.target.value = ''
   }, [addImageBlock])
 
+  // 서식 적용 (선택 텍스트를 HTML로 감쌈)
+  const applyFormat = useCallback((formatType: 'size' | 'center' | 'color', value?: string) => {
+    const blockId = activeFocusedBlockRef.current
+    if (!blockId) return
+    const textarea = textareaRefsMap.current.get(blockId)
+    if (!textarea) return
+
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const content = textarea.value
+    const selected = content.substring(start, end) || '텍스트'
+
+    let wrapped: string
+    if (formatType === 'size') {
+      wrapped = `<span style="font-size:${value}">${selected}</span>`
+    } else if (formatType === 'center') {
+      wrapped = `<div style="text-align:center">${selected}</div>`
+    } else if (formatType === 'color') {
+      wrapped = `<span style="color:${value}">${selected}</span>`
+    } else {
+      return
+    }
+
+    const newContent = content.substring(0, start) + wrapped + content.substring(end)
+    updateTextBlock(blockId, newContent)
+    setTimeout(() => {
+      textarea.focus()
+      const newCursorPos = start + wrapped.length
+      textarea.setSelectionRange(newCursorPos, newCursorPos)
+    }, 10)
+  }, [updateTextBlock])
+
   // 코드 모드 전환
   const toggleCodeMode = useCallback(() => {
     if (showCodeMode) {
@@ -524,42 +557,101 @@ function MarkdownEditor({
   return (
     <div className="space-y-3">
       {/* 툴바 */}
-      <div className="flex items-center justify-between p-2 bg-gray-50 border border-gray-200 rounded-t-lg">
-        <div className="flex items-center gap-2">
-          <label className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-200 rounded cursor-pointer transition-colors">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            이미지 추가
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/gif,image/webp"
-              multiple
-              onChange={handleFileSelect}
-              className="hidden"
-            />
-          </label>
-          {isUploading && (
-            <span className="flex items-center gap-1.5 text-xs text-primary-600">
-              <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+      <div className="bg-gray-50 border border-gray-200 rounded-t-lg">
+        {/* 1행: 이미지 추가 + 코드 모드 */}
+        <div className="flex items-center justify-between p-2 border-b border-gray-200">
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-200 rounded cursor-pointer transition-colors">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
-              업로드 중...
-            </span>
-          )}
+              이미지 추가
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/gif,image/webp"
+                multiple
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+            </label>
+            {isUploading && (
+              <span className="flex items-center gap-1.5 text-xs text-primary-600">
+                <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+                업로드 중...
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={toggleCodeMode}
+            className={`px-3 py-1.5 text-sm rounded transition-colors ${
+              showCodeMode
+                ? 'bg-gray-600 text-white'
+                : 'text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            {showCodeMode ? '비주얼 모드' : '코드 모드'}
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={toggleCodeMode}
-          className={`px-3 py-1.5 text-sm rounded transition-colors ${
-            showCodeMode
-              ? 'bg-gray-600 text-white'
-              : 'text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          {showCodeMode ? '비주얼 모드' : '코드 모드'}
-        </button>
+        {/* 2행: 서식 도구모음 (비주얼 모드에서만 표시) */}
+        {!showCodeMode && (
+          <div className="flex items-center gap-1 px-2 py-1.5 flex-wrap">
+            {/* 글씨 크기 */}
+            <span className="text-xs text-gray-400 mr-1">크기:</span>
+            {[
+              { label: '소', value: '0.8em' },
+              { label: '중', value: '1em' },
+              { label: '대', value: '1.3em' },
+              { label: '특대', value: '1.7em' },
+            ].map(({ label, value }) => (
+              <button
+                key={value}
+                type="button"
+                onMouseDown={(e) => { e.preventDefault(); applyFormat('size', value) }}
+                className="px-2 py-1 text-xs text-gray-600 hover:bg-gray-200 rounded border border-gray-300 transition-colors"
+                title={`글씨 크기: ${label}`}
+              >
+                {label}
+              </button>
+            ))}
+            <span className="mx-1 text-gray-300">|</span>
+            {/* 가운데 정렬 */}
+            <button
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); applyFormat('center') }}
+              className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:bg-gray-200 rounded border border-gray-300 transition-colors"
+              title="가운데 정렬"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M7 12h10M4 18h16" />
+              </svg>
+              가운데
+            </button>
+            <span className="mx-1 text-gray-300">|</span>
+            {/* 글씨 색깔 */}
+            <span className="text-xs text-gray-400 mr-1">색깔:</span>
+            {[
+              { color: '#111827', label: '검정' },
+              { color: '#ef4444', label: '빨강' },
+              { color: '#3b82f6', label: '파랑' },
+              { color: '#22c55e', label: '초록' },
+              { color: '#f97316', label: '주황' },
+              { color: '#a855f7', label: '보라' },
+            ].map(({ color, label }) => (
+              <button
+                key={color}
+                type="button"
+                onMouseDown={(e) => { e.preventDefault(); applyFormat('color', color) }}
+                className="w-5 h-5 rounded-full border-2 border-white shadow hover:scale-110 transition-transform"
+                style={{ backgroundColor: color }}
+                title={`글씨 색: ${label}`}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 에디터 영역 */}
@@ -673,6 +765,7 @@ function MarkdownEditor({
                           value={block.content}
                           onChange={(e) => updateTextBlock(block.id, e.target.value)}
                           onPaste={(e) => handlePaste(e, block.id)}
+                          onFocus={() => { activeFocusedBlockRef.current = block.id }}
                           className="w-full px-0 py-2 border-0 focus:ring-0 resize-none text-gray-900 placeholder-gray-400"
                           rows={Math.max(2, block.content.split('\n').length)}
                           placeholder={placeholder || '내용을 입력하세요...'}
@@ -722,7 +815,7 @@ function MarkdownEditor({
 
       {/* 도움말 */}
       <p className="text-xs text-gray-500">
-        이미지: 드래그 또는 Ctrl+V로 붙여넣기 | 블록 왼쪽 ⠿ 핸들로 순서 변경 | 코드 모드에서 마크다운 직접 편집
+        이미지: 드래그 또는 Ctrl+V로 붙여넣기 (최대 50MB) | 서식: 텍스트 선택 후 도구모음 버튼 클릭 | 블록 왼쪽 ⠿ 핸들로 순서 변경
       </p>
     </div>
   )
