@@ -170,6 +170,16 @@ function MarkdownEditor({
     blocksRef.current = blocks
   }, [blocks])
 
+  // 블록 변경 시 모든 textarea 자동 높이 재계산
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      textareaRefsMap.current.forEach((el) => {
+        el.style.height = 'auto'
+        el.style.height = `${el.scrollHeight}px`
+      })
+    })
+  }, [blocks])
+
   // 블록 변경 시 마크다운으로 변환하여 부모에 알림
   const updateBlocks = useCallback((newBlocks: ContentBlock[]) => {
     setBlocks(newBlocks)
@@ -676,7 +686,7 @@ function MarkdownEditor({
           onDragOver={handleContainerDragOver}
           onDrop={handleContainerDrop}
         >
-          <div className="p-4 space-y-1">
+          <div className="px-4 pt-3 pb-4">
             {blocks.map((block, index) => {
               // 드롭 인디케이터: no-op 위치(원래 자리)에는 표시하지 않음
               const dragSourceIndex = draggedBlockId ? blocks.findIndex(b => b.id === draggedBlockId) : -1
@@ -702,26 +712,30 @@ function MarkdownEditor({
                   </div>
                 )}
 
-                {/* 블록 (드래그 핸들 + 콘텐츠) - 드래그 중 collapse로 다른 블록 접근 용이하게 */}
+                {/* 블록 (드래그 핸들 + 콘텐츠) */}
                 <div
                   data-block-id={block.id}
-                  className={`flex items-start gap-1 group/block rounded ${
+                  className={`flex items-start gap-1 group/block ${
                     draggedBlockId === block.id
                       ? 'max-h-10 overflow-hidden opacity-50 border-2 border-dashed border-primary-400 bg-primary-50 rounded-md my-0.5'
                       : ''
                   }`}
                 >
-                  {/* 드래그 핸들 */}
+                  {/* 드래그 핸들 - 이미지 블록에서만 항상, 텍스트는 호버 시 */}
                   <div
                     draggable
                     onDragStart={(e) => handleBlockDragStart(e, block.id)}
                     onDragEnd={handleBlockDragEnd}
-                    className={`flex-shrink-0 mt-2 px-0.5 cursor-grab active:cursor-grabbing transition-opacity select-none ${
-                      draggedBlockId ? 'opacity-100' : 'opacity-0 group-hover/block:opacity-100'
+                    className={`flex-shrink-0 mt-1.5 px-0.5 cursor-grab active:cursor-grabbing transition-opacity select-none ${
+                      draggedBlockId
+                        ? 'opacity-100'
+                        : block.type === 'image'
+                        ? 'opacity-30 hover:opacity-70'
+                        : 'opacity-0 group-hover/block:opacity-30'
                     }`}
                     title="드래그하여 순서 변경"
                   >
-                    <svg className="w-4 h-5 text-gray-300 hover:text-gray-500" viewBox="0 0 16 20" fill="currentColor">
+                    <svg className="w-4 h-5 text-gray-400" viewBox="0 0 16 20" fill="currentColor">
                       <circle cx="5" cy="4" r="1.5"/>
                       <circle cx="11" cy="4" r="1.5"/>
                       <circle cx="5" cy="10" r="1.5"/>
@@ -734,8 +748,8 @@ function MarkdownEditor({
                   {/* 블록 콘텐츠 (드래그 중 pointer-events 비활성화) */}
                   <div className={`flex-1 min-w-0 ${draggedBlockId ? 'pointer-events-none' : ''}`}>
                     {block.type === 'image' ? (
-                      // 이미지 블록
-                      <div className="relative group my-1">
+                      // 이미지 블록 - 위아래 여백으로 구분
+                      <div className="relative group my-3">
                         <img
                           src={block.content}
                           alt={block.alt || '이미지'}
@@ -755,35 +769,34 @@ function MarkdownEditor({
                         </button>
                       </div>
                     ) : (
-                      // 텍스트 블록
-                      <div className="relative">
-                        <textarea
-                          ref={(el) => {
-                            if (el) textareaRefsMap.current.set(block.id, el)
-                            else textareaRefsMap.current.delete(block.id)
-                          }}
-                          value={block.content}
-                          onChange={(e) => updateTextBlock(block.id, e.target.value)}
-                          onPaste={(e) => handlePaste(e, block.id)}
-                          onFocus={() => { activeFocusedBlockRef.current = block.id }}
-                          className="w-full px-0 py-2 border-0 focus:ring-0 resize-none text-gray-900 placeholder-gray-400"
-                          rows={Math.max(2, block.content.split('\n').length)}
-                          placeholder={placeholder || '내용을 입력하세요...'}
-                        />
-                        {/* 텍스트 블록 삭제 (마지막 블록 제외) */}
-                        {index !== blocks.length - 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removeTextBlock(block.id)}
-                            className="absolute top-1 right-1 p-1 text-gray-300 hover:text-red-500 rounded opacity-0 group-hover/block:opacity-100 transition-all"
-                            title="텍스트 블록 삭제"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                          </button>
-                        )}
-                      </div>
+                      // 텍스트 블록 - 경계 없이 자연스럽게
+                      <textarea
+                        ref={(el) => {
+                          if (el) {
+                            textareaRefsMap.current.set(block.id, el)
+                            // 초기 마운트 시 높이 설정
+                            requestAnimationFrame(() => {
+                              el.style.height = 'auto'
+                              el.style.height = `${el.scrollHeight}px`
+                            })
+                          } else {
+                            textareaRefsMap.current.delete(block.id)
+                          }
+                        }}
+                        value={block.content}
+                        onChange={(e) => {
+                          // 타이핑 시 즉시 높이 자동 조절
+                          e.target.style.height = 'auto'
+                          e.target.style.height = `${e.target.scrollHeight}px`
+                          updateTextBlock(block.id, e.target.value)
+                        }}
+                        onPaste={(e) => handlePaste(e, block.id)}
+                        onFocus={() => { activeFocusedBlockRef.current = block.id }}
+                        rows={1}
+                        className="w-full px-0 py-1 border-0 focus:ring-0 resize-none overflow-hidden text-gray-900 placeholder-gray-400 leading-relaxed bg-transparent"
+                        placeholder={index === blocks.length - 1 ? (placeholder || '내용을 입력하세요...') : ''}
+                        style={{ minHeight: '1.75rem' }}
+                      />
                     )}
                   </div>
                 </div>
