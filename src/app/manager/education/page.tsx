@@ -84,9 +84,9 @@ export default async function EducationPage() {
   const filteredPosts = isAdmin
     ? (posts || [])
     : (posts || []).filter((post: any) => {
-        // 승인 대기 중인 게시물: 본인이 작성한 것만 표시
+        // 승인 대기 중인 게시물은 매니저에게 표시하지 않음 (관리자 승인 후 공개)
         if (post.approval_status === 'pending') {
-          return post.author_id === user.id
+          return false
         }
 
         if (post.targeting_type === 'individual') {
