@@ -16,10 +16,17 @@ interface MeetingPost {
   post_type: 'free' | 'poll'
   priority: string | null
   deadline: string | null
+  sub_category: string | null
+}
+
+interface SubCategory {
+  id: string
+  name: string
 }
 
 interface EditMeetingContentProps {
   post: MeetingPost
+  subCategories: SubCategory[]
 }
 
 const PRIORITY_OPTIONS: { value: Priority; label: string; color: string }[] = [
@@ -30,7 +37,7 @@ const PRIORITY_OPTIONS: { value: Priority; label: string; color: string }[] = [
   { value: 'low', label: '낮음', color: 'text-gray-500' },
 ]
 
-export default function EditMeetingContent({ post }: EditMeetingContentProps) {
+export default function EditMeetingContent({ post, subCategories }: EditMeetingContentProps) {
   const router = useRouter()
   const supabase = createClient()
 
@@ -38,6 +45,7 @@ export default function EditMeetingContent({ post }: EditMeetingContentProps) {
   const [content, setContent] = useState(post.content || '')
   const [priority, setPriority] = useState<Priority>((post.priority as Priority) || '')
   const [deadline, setDeadline] = useState(post.deadline ? post.deadline.split('T')[0] : '')
+  const [subCategory, setSubCategory] = useState(post.sub_category || '')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -59,6 +67,7 @@ export default function EditMeetingContent({ post }: EditMeetingContentProps) {
           content: content.trim() || null,
           priority: priority || null,
           deadline: deadline || null,
+          sub_category: subCategory || null,
         })
         .eq('id', post.id)
 
@@ -117,6 +126,40 @@ export default function EditMeetingContent({ post }: EditMeetingContentProps) {
               required
             />
           </div>
+
+          {/* 유형 */}
+          {subCategories.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">유형</label>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSubCategory('')}
+                  className={`px-3 py-1.5 text-sm rounded-full border-2 transition-all ${
+                    subCategory === ''
+                      ? 'border-primary-500 bg-primary-50 text-primary-700'
+                      : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                  }`}
+                >
+                  없음
+                </button>
+                {subCategories.map((sc) => (
+                  <button
+                    key={sc.id}
+                    type="button"
+                    onClick={() => setSubCategory(sc.name)}
+                    className={`px-3 py-1.5 text-sm rounded-full border-2 transition-all ${
+                      subCategory === sc.name
+                        ? 'border-primary-500 bg-primary-50 text-primary-700'
+                        : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                    }`}
+                  >
+                    {sc.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* 우선순위 */}
           <div>

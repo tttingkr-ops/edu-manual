@@ -20,11 +20,19 @@ export default async function EditMeetingPage({
     .eq('id', user.id)
     .single()
 
-  const { data: post } = await supabase
-    .from('meeting_posts')
-    .select('id, title, content, post_type, priority, deadline, author_id')
-    .eq('id', id)
-    .single()
+  const [{ data: post }, { data: meetingSubCategories }] = await Promise.all([
+    supabase
+      .from('meeting_posts')
+      .select('id, title, content, post_type, priority, deadline, author_id, sub_category')
+      .eq('id', id)
+      .single(),
+    supabase
+      .from('sub_categories')
+      .select('id, name')
+      .eq('category', 'meeting')
+      .order('sort_order')
+      .order('name'),
+  ])
 
   if (!post) notFound()
 
@@ -33,5 +41,5 @@ export default async function EditMeetingPage({
     redirect(`/meetings/${id}`)
   }
 
-  return <EditMeetingContent post={post} />
+  return <EditMeetingContent post={post} subCategories={meetingSubCategories || []} />
 }

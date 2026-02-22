@@ -460,6 +460,7 @@ export interface Database {
           status: 'pending' | 'completed';
           priority: 'urgent' | 'high' | 'normal' | 'low' | null;
           deadline: string | null;
+          sub_category: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -474,6 +475,7 @@ export interface Database {
           status?: 'pending' | 'completed';
           priority?: 'urgent' | 'high' | 'normal' | 'low' | null;
           deadline?: string | null;
+          sub_category?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -488,6 +490,7 @@ export interface Database {
           status?: 'pending' | 'completed';
           priority?: 'urgent' | 'high' | 'normal' | 'low' | null;
           deadline?: string | null;
+          sub_category?: string | null;
           created_at?: string;
           updated_at?: string;
         };

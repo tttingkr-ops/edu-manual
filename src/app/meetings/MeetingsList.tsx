@@ -1,9 +1,11 @@
 // Created: 2026-02-11 14:30:00
 // Updated: 2026-02-12 - 상태(완료/미완), 긴급도, 데드라인 필터/정렬/표시 추가
+// Updated: 2026-02-22 - 유형(sub-category) 필터/관리 추가
 'use client'
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { createClient } from '@/lib/supabase/client'
 
 interface MeetingPost {
   id: string
@@ -18,12 +20,21 @@ interface MeetingPost {
   priority: 'urgent' | 'high' | 'normal' | 'low' | null
   deadline: string | null
   created_at: string
+  sub_category: string | null
+}
+
+interface SubCategory {
+  id: string
+  category: string
+  name: string
+  sort_order: number
 }
 
 interface MeetingsListProps {
   posts: MeetingPost[]
   currentUserId: string
   userRole: string
+  subCategories: SubCategory[]
 }
 
 type FilterType = 'all' | 'free' | 'poll'
@@ -37,11 +48,52 @@ const PRIORITY_CONFIG: Record<string, { label: string; color: string; bgColor: s
   low: { label: '낮음', color: 'text-gray-600', bgColor: 'bg-gray-100 border-gray-200', order: 3 },
 }
 
-export default function MeetingsList({ posts, currentUserId, userRole }: MeetingsListProps) {
+export default function MeetingsList({ posts, currentUserId, userRole, subCategories: initialSubCategories }: MeetingsListProps) {
+  const supabase = createClient()
   const [filter, setFilter] = useState<FilterType>('all')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [sortType, setSortType] = useState<SortType>('latest')
   const [searchTerm, setSearchTerm] = useState('')
+  const [activeSubCategory, setActiveSubCategory] = useState<string | null>(null)
+  const [subCategories, setSubCategories] = useState<SubCategory[]>(initialSubCategories)
+  const [isAddingSubCategory, setIsAddingSubCategory] = useState(false)
+  const [newSubCategoryName, setNewSubCategoryName] = useState('')
+
+  const isAdmin = userRole === 'admin'
+
+  const handleAddSubCategory = async () => {
+    const name = newSubCategoryName.trim()
+    if (!name) return
+    try {
+      const { data, error } = await supabase
+        .from('sub_categories')
+        .insert({ category: 'meeting', name, sort_order: subCategories.length })
+        .select()
+        .single()
+      if (error) {
+        if (error.code === '23505') { alert('이미 존재하는 유형입니다.') } else { throw error }
+        return
+      }
+      setSubCategories([...subCategories, data])
+      setNewSubCategoryName('')
+      setIsAddingSubCategory(false)
+    } catch (err: any) {
+      alert(err.message || '유형 추가 중 오류가 발생했습니다.')
+    }
+  }
+
+  const handleDeleteSubCategory = async (sc: SubCategory) => {
+    if (!confirm(`"${sc.name}" 유형을 삭제하시겠습니까?`)) return
+    try {
+      const { error } = await supabase.from('sub_categories').delete().eq('id', sc.id)
+      if (error) throw error
+      await supabase.from('meeting_posts').update({ sub_category: null }).eq('sub_category', sc.name)
+      setSubCategories(subCategories.filter(s => s.id !== sc.id))
+      if (activeSubCategory === sc.name) setActiveSubCategory(null)
+    } catch (err: any) {
+      alert(err.message || '유형 삭제 중 오류가 발생했습니다.')
+    }
+  }
 
   // 데드라인까지 남은 일수 계산
   const getDaysUntilDeadline = (deadline: string | null): number | null => {
@@ -79,7 +131,8 @@ export default function MeetingsList({ posts, currentUserId, userRole }: Meeting
     const matchesFilter = filter === 'all' || post.post_type === filter
     const matchesStatus = statusFilter === 'all' || post.status === statusFilter
     const matchesSearch = post.title.toLowerCase().includes(searchTerm.toLowerCase())
-    return matchesFilter && matchesStatus && matchesSearch
+    const matchesSubCategory = activeSubCategory === null || post.sub_category === activeSubCategory
+    return matchesFilter && matchesStatus && matchesSearch && matchesSubCategory
   })
 
   // 정렬
@@ -240,6 +293,77 @@ export default function MeetingsList({ posts, currentUserId, userRole }: Meeting
             ))}
           </div>
         </div>
+
+        {/* 3행: 유형(sub-category) 필터 */}
+        {(subCategories.length > 0 || isAdmin) && (
+          <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-gray-100">
+            <span className="text-sm font-medium text-gray-600 mr-1">유형:</span>
+            <button
+              onClick={() => setActiveSubCategory(null)}
+              className={`px-3 py-1.5 text-sm rounded-full border transition-colors ${
+                activeSubCategory === null
+                  ? 'bg-primary-600 text-white border-primary-600'
+                  : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              전체
+            </button>
+            {subCategories.map((sc) => (
+              <div key={sc.id} className="flex items-center gap-0.5">
+                <button
+                  onClick={() => setActiveSubCategory(activeSubCategory === sc.name ? null : sc.name)}
+                  className={`px-3 py-1.5 text-sm border transition-colors ${
+                    isAdmin ? 'rounded-l-full' : 'rounded-full'
+                  } ${
+                    activeSubCategory === sc.name
+                      ? 'bg-primary-600 text-white border-primary-600'
+                      : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  {sc.name}
+                </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => handleDeleteSubCategory(sc)}
+                    className="px-1.5 py-1.5 text-sm border border-l-0 rounded-r-full bg-white text-gray-400 border-gray-300 hover:bg-red-50 hover:text-red-500 transition-colors"
+                    title="유형 삭제"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            ))}
+            {isAdmin && (
+              isAddingSubCategory ? (
+                <div className="flex items-center gap-1">
+                  <input
+                    type="text"
+                    value={newSubCategoryName}
+                    onChange={(e) => setNewSubCategoryName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleAddSubCategory(); if (e.key === 'Escape') { setIsAddingSubCategory(false); setNewSubCategoryName('') } }}
+                    placeholder="유형 이름"
+                    autoFocus
+                    className="px-3 py-1.5 text-sm border border-primary-400 rounded-full focus:outline-none focus:ring-1 focus:ring-primary-400 w-28"
+                  />
+                  <button onClick={handleAddSubCategory} className="px-2 py-1.5 text-sm bg-primary-600 text-white rounded-full hover:bg-primary-700">추가</button>
+                  <button onClick={() => { setIsAddingSubCategory(false); setNewSubCategoryName('') }} className="px-2 py-1.5 text-sm text-gray-500 hover:text-gray-700">취소</button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setIsAddingSubCategory(true)}
+                  className="flex items-center gap-1 px-3 py-1.5 text-sm text-primary-600 border border-dashed border-primary-300 rounded-full hover:bg-primary-50 transition-colors"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  유형 추가
+                </button>
+              )
+            )}
+          </div>
+        )}
       </div>
 
       {/* 게시물 목록 */}
@@ -300,6 +424,11 @@ export default function MeetingsList({ posts, currentUserId, userRole }: Meeting
                       {post.is_anonymous && (
                         <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">
                           비밀 투표
+                        </span>
+                      )}
+                      {post.sub_category && (
+                        <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-600">
+                          {post.sub_category}
                         </span>
                       )}
                       <h3 className={`text-base font-semibold truncate ${isCompleted ? 'text-gray-400 line-through' : 'text-gray-900'}`}>

@@ -1,4 +1,5 @@
 // Created: 2026-02-11 14:30:00
+export const dynamic = 'force-dynamic'
 import { createClient } from '@/lib/supabase/server'
 import MeetingsList from './MeetingsList'
 
@@ -41,6 +42,14 @@ export default async function MeetingsPage() {
     voteCountMap[v.post_id] = (voteCountMap[v.post_id] || 0) + 1
   }
 
+  // Get meeting sub_categories
+  const { data: meetingSubCategories } = await supabase
+    .from('sub_categories')
+    .select('*')
+    .eq('category', 'meeting')
+    .order('sort_order')
+    .order('name')
+
   const postsWithCounts = (posts || []).map((post: any) => ({
     ...post,
     author_name: post.users?.nickname || post.users?.username || '알 수 없음',
@@ -53,6 +62,7 @@ export default async function MeetingsPage() {
       posts={postsWithCounts}
       currentUserId={user.id}
       userRole={userData?.role || 'manager'}
+      subCategories={meetingSubCategories || []}
     />
   )
 }

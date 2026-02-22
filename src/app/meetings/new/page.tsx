@@ -9,6 +9,11 @@ import MarkdownEditor from '@/components/MarkdownEditor'
 
 type PostType = 'free' | 'poll'
 
+interface SubCategory {
+  id: string
+  name: string
+}
+
 export default function NewMeetingPage() {
   const router = useRouter()
   const supabase = createClient()
@@ -20,6 +25,8 @@ export default function NewMeetingPage() {
   const [title, setTitle] = useState('')
   const [postType, setPostType] = useState<PostType>('free')
   const [content, setContent] = useState('')
+  const [subCategory, setSubCategory] = useState<string>('')
+  const [subCategories, setSubCategories] = useState<SubCategory[]>([])
 
   // Priority & deadline
   type Priority = 'urgent' | 'high' | 'normal' | 'low' | ''
@@ -42,7 +49,17 @@ export default function NewMeetingPage() {
         router.push('/login')
       }
     }
+    const fetchSubCategories = async () => {
+      const { data } = await supabase
+        .from('sub_categories')
+        .select('id, name')
+        .eq('category', 'meeting')
+        .order('sort_order')
+        .order('name')
+      setSubCategories(data || [])
+    }
     getUser()
+    fetchSubCategories()
   }, [])
 
   const addOption = () => {
@@ -93,6 +110,7 @@ export default function NewMeetingPage() {
         author_id: userId,
         priority: priority || null,
         deadline: deadline || null,
+        sub_category: subCategory || null,
       }
 
       if (postType === 'free') {
@@ -179,6 +197,42 @@ export default function NewMeetingPage() {
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
           />
         </div>
+
+        {/* 유형 */}
+        {subCategories.length > 0 && (
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              유형 <span className="text-gray-400 text-xs font-normal">(선택사항)</span>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setSubCategory('')}
+                className={`px-3 py-1.5 text-sm rounded-full border-2 transition-all ${
+                  subCategory === ''
+                    ? 'border-primary-500 bg-primary-50 text-primary-700 ring-1 ring-primary-400'
+                    : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                }`}
+              >
+                없음
+              </button>
+              {subCategories.map((sc) => (
+                <button
+                  key={sc.id}
+                  type="button"
+                  onClick={() => setSubCategory(sc.name)}
+                  className={`px-3 py-1.5 text-sm rounded-full border-2 transition-all ${
+                    subCategory === sc.name
+                      ? 'border-primary-500 bg-primary-50 text-primary-700 ring-1 ring-primary-400'
+                      : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                  }`}
+                >
+                  {sc.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* 긴급도 & 데드라인 */}
         <div className="mb-6 grid grid-cols-2 gap-4">
