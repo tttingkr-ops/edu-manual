@@ -244,6 +244,7 @@ export default function EditPostContent({ post, initialGroups, initialTargetUser
         if (questionError) console.error('Question save error:', questionError)
       }
 
+      router.refresh()
       router.push(approveAfterSave ? '/admin/posts/pending' : '/admin/posts')
     } catch (err: any) {
       console.error('Error updating post:', err)
@@ -275,6 +276,7 @@ export default function EditPostContent({ post, initialGroups, initialTargetUser
 
       if (deleteError) throw deleteError
 
+      router.refresh()
       router.push('/admin/posts')
     } catch (err: any) {
       console.error('Error deleting post:', err)

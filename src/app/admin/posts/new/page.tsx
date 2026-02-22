@@ -264,6 +264,7 @@ export default function NewPostPage() {
         }
       }
 
+      router.refresh()
       router.push('/admin/posts')
     } catch (err: any) {
       console.error('Error creating post:', err)
