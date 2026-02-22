@@ -40,15 +40,17 @@ export default async function PostsPage() {
       .select('post_id'),
     supabase
       .from('user_groups')
-      .select('user_id, group_name'),
+      .select('user_id, groups(name)'),
   ])
 
   // 매니저별 그룹 목록 맵 생성 (user_id → group_name[])
   const managerGroupMap = new Map<string, string[]>()
   for (const ug of (userGroups || [])) {
-    const groups = managerGroupMap.get(ug.user_id) || []
-    groups.push(ug.group_name)
-    managerGroupMap.set(ug.user_id, groups)
+    const groupName = (ug.groups as any)?.name as string | undefined
+    if (!groupName) continue
+    const existing = managerGroupMap.get(ug.user_id) || []
+    existing.push(groupName)
+    managerGroupMap.set(ug.user_id, existing)
   }
 
   // 각 게시물별 미확인 매니저 + 대상 지정 계산
