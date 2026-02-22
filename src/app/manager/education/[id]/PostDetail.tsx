@@ -208,6 +208,7 @@ export default function PostDetail({
 
       if (error) throw error
 
+      router.refresh()
       router.push('/manager/education')
     } catch (err: any) {
       console.error('Delete post error:', err)
