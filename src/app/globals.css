@@ -128,3 +128,19 @@ body {
 .markdown-content strong {
   @apply font-semibold text-gray-900;
 }
+
+/* 이미지 나란히 표시 */
+.markdown-content .image-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 1rem 0;
+}
+
+.markdown-content .image-row img {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  max-width: 100%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}

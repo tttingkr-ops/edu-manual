@@ -16,9 +16,10 @@ interface MarkdownEditorProps {
 
 interface ContentBlock {
   id: string
-  type: 'text' | 'image'
-  content: string // text일 경우 텍스트, image일 경우 URL
-  alt?: string // image일 경우 alt 텍스트
+  type: 'text' | 'image' | 'image-row'
+  content: string // text: 텍스트, image: URL, image-row: unused
+  alt?: string // image의 alt 텍스트
+  images?: Array<{ url: string; alt: string }> // image-row
 }
 
 // 이미지 압축 함수
@@ -50,65 +51,63 @@ const compressImage = async (file: File, maxWidth = 1200, quality = 0.8): Promis
   })
 }
 
-// 마크다운을 블록으로 파싱 (자유 형식: 텍스트는 내용이 있을 때만, 마지막은 항상 텍스트)
+// 마크다운을 블록으로 파싱 (image-row div + 단독 이미지 + 텍스트)
 const parseMarkdownToBlocks = (markdown: string): ContentBlock[] => {
   const blocks: ContentBlock[] = []
-  const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g
-
-  let lastIndex = 0
-  let match
   let blockId = 0
 
-  while ((match = imageRegex.exec(markdown)) !== null) {
-    // 이미지 앞 텍스트 (내용이 있을 때만 추가)
+  // image-row div 또는 단독 이미지를 모두 매칭
+  const combinedRegex = /<div class="image-row">([\s\S]*?)<\/div>|!\[([^\]]*)\]\(([^)]+)\)/g
+  let lastIndex = 0
+  let match
+
+  while ((match = combinedRegex.exec(markdown)) !== null) {
     const text = markdown.slice(lastIndex, match.index).trim()
     if (text) {
-      blocks.push({
-        id: `block-${blockId++}`,
-        type: 'text',
-        content: text,
-      })
+      blocks.push({ id: `block-${blockId++}`, type: 'text', content: text })
     }
 
-    // 이미지 블록
-    blocks.push({
-      id: `block-${blockId++}`,
-      type: 'image',
-      content: match[2],
-      alt: match[1] || '이미지',
-    })
+    if (match[1] !== undefined) {
+      // image-row: 내부 이미지들 추출
+      const innerImages: Array<{ url: string; alt: string }> = []
+      const imgRe = /!\[([^\]]*)\]\(([^)]+)\)/g
+      let imgMatch
+      while ((imgMatch = imgRe.exec(match[1])) !== null) {
+        innerImages.push({ alt: imgMatch[1] || '이미지', url: imgMatch[2] })
+      }
+      if (innerImages.length > 0) {
+        blocks.push({ id: `block-${blockId++}`, type: 'image-row', content: '', images: innerImages })
+      }
+    } else {
+      // 단독 이미지
+      blocks.push({ id: `block-${blockId++}`, type: 'image', content: match[3], alt: match[2] || '이미지' })
+    }
 
     lastIndex = match.index + match[0].length
   }
 
-  // 나머지 텍스트
   const remaining = markdown.slice(lastIndex).trim()
   if (remaining) {
-    blocks.push({
-      id: `block-${blockId++}`,
-      type: 'text',
-      content: remaining,
-    })
+    blocks.push({ id: `block-${blockId++}`, type: 'text', content: remaining })
   }
 
-  // 마지막 블록이 텍스트가 아니면 빈 텍스트 추가 (항상 타이핑 가능하도록)
   if (blocks.length === 0 || blocks[blocks.length - 1].type !== 'text') {
-    blocks.push({
-      id: `block-${blockId++}`,
-      type: 'text',
-      content: '',
-    })
+    blocks.push({ id: `block-${blockId++}`, type: 'text', content: '' })
   }
 
   return blocks
 }
 
-// 블록을 마크다운으로 변환 (빈 텍스트 블록은 마크다운에서 제외)
+// 블록을 마크다운으로 변환
 const blocksToMarkdown = (blocks: ContentBlock[]): string => {
   return blocks
     .map(block => {
       if (block.type === 'image') {
         return `![${block.alt || '이미지'}](${block.content})`
+      }
+      if (block.type === 'image-row' && block.images) {
+        const imgs = block.images.map(img => `![${img.alt}](${img.url})`).join(' ')
+        return `<div class="image-row">${imgs}</div>`
       }
       return block.content
     })
@@ -140,6 +139,8 @@ function MarkdownEditor({
   const blocksContainerRef = useRef<HTMLDivElement>(null)
   const textareaRefsMap = useRef<Map<string, HTMLTextAreaElement>>(new Map())
   const activeFocusedBlockRef = useRef<string | null>(null)
+  const addToRowInputRef = useRef<HTMLInputElement>(null)
+  const addToRowBlockIdRef = useRef<string | null>(null)
   const supabase = useMemo(() => createClient(), [])
 
   // 외부 value 변경 시 동기화 (내부 변경은 무시)
@@ -330,6 +331,59 @@ function MarkdownEditor({
     const newBlocks = blocks.filter(b => b.id !== blockId)
     updateBlocks(newBlocks)
   }, [blocks, updateBlocks])
+
+  // 이미지를 row에 추가 (단독 이미지 → image-row, 또는 기존 row에 추가)
+  const addImageToRow = useCallback(async (file: File, blockId: string) => {
+    const url = await uploadImage(file)
+    if (!url) return
+
+    const newBlocks = blocks.map(b => {
+      if (b.id !== blockId) return b
+      if (b.type === 'image') {
+        // 단독 이미지 → image-row로 변환
+        return {
+          ...b,
+          type: 'image-row' as const,
+          images: [
+            { url: b.content, alt: b.alt || '이미지' },
+            { url, alt: file.name },
+          ],
+        }
+      }
+      if (b.type === 'image-row' && b.images && b.images.length < 3) {
+        return { ...b, images: [...b.images, { url, alt: file.name }] }
+      }
+      return b
+    })
+    updateBlocks(newBlocks)
+  }, [blocks, uploadImage, updateBlocks])
+
+  // image-row에서 이미지 삭제 (1개만 남으면 단독 이미지로 변환)
+  const removeImageFromRow = useCallback((blockId: string, imageIndex: number) => {
+    const newBlocks = blocks.map(b => {
+      if (b.id !== blockId || b.type !== 'image-row' || !b.images) return b
+      const newImages = b.images.filter((_, i) => i !== imageIndex)
+      if (newImages.length === 1) {
+        return { id: b.id, type: 'image' as const, content: newImages[0].url, alt: newImages[0].alt }
+      }
+      return { ...b, images: newImages }
+    })
+    updateBlocks(newBlocks)
+  }, [blocks, updateBlocks])
+
+  // image-row에 이미지 추가 버튼 핸들러
+  const handleAddToRowClick = useCallback((blockId: string) => {
+    addToRowBlockIdRef.current = blockId
+    addToRowInputRef.current?.click()
+  }, [])
+
+  const handleAddToRowFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !addToRowBlockIdRef.current) return
+    await addImageToRow(file, addToRowBlockIdRef.current)
+    e.target.value = ''
+    addToRowBlockIdRef.current = null
+  }, [addImageToRow])
 
   // === 블록 순서 변경 (드래그 앤 드롭) - ref 기반으로 stale closure 방지 ===
   const handleBlockDragStart = useCallback((e: React.DragEvent, blockId: string) => {
@@ -664,6 +718,15 @@ function MarkdownEditor({
         )}
       </div>
 
+      {/* image-row 추가용 숨겨진 파일 입력 */}
+      <input
+        ref={addToRowInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/gif,image/webp"
+        onChange={handleAddToRowFileSelect}
+        className="hidden"
+      />
+
       {/* 에디터 영역 */}
       {showCodeMode ? (
         // 코드 모드 (마크다운 직접 편집)
@@ -748,25 +811,78 @@ function MarkdownEditor({
                   {/* 블록 콘텐츠 (드래그 중 pointer-events 비활성화) */}
                   <div className={`flex-1 min-w-0 ${draggedBlockId ? 'pointer-events-none' : ''}`}>
                     {block.type === 'image' ? (
-                      // 이미지 블록 - 위아래 여백으로 구분
-                      <div className="relative group my-3">
-                        <img
-                          src={block.content}
-                          alt={block.alt || '이미지'}
-                          draggable={false}
-                          onDragStart={(e) => e.preventDefault()}
-                          className="max-w-full h-auto rounded-lg border border-gray-200 shadow-sm"
-                        />
+                      // 단독 이미지 블록
+                      <div className="flex items-start gap-2 my-3 group">
+                        <div className="relative flex-1">
+                          <img
+                            src={block.content}
+                            alt={block.alt || '이미지'}
+                            draggable={false}
+                            onDragStart={(e) => e.preventDefault()}
+                            className="max-w-full h-auto rounded-lg border border-gray-200 shadow-sm"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeImageBlock(block.id)}
+                            className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                            title="이미지 삭제"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                        {/* 이미지 옆에 추가 버튼 */}
                         <button
                           type="button"
-                          onClick={() => removeImageBlock(block.id)}
-                          className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
-                          title="이미지 삭제"
+                          onClick={() => handleAddToRowClick(block.id)}
+                          className="flex-shrink-0 w-10 self-stretch min-h-[60px] flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg text-gray-400 hover:border-primary-400 hover:text-primary-500 hover:bg-primary-50 transition-colors opacity-0 group-hover:opacity-100"
+                          title="이미지 옆에 추가 (최대 3개)"
+                          disabled={isUploading}
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                           </svg>
                         </button>
+                      </div>
+                    ) : block.type === 'image-row' ? (
+                      // 이미지 row 블록 - 나란히 배치
+                      <div className="flex items-start gap-2 my-3 group">
+                        {block.images?.map((img, imgIdx) => (
+                          <div key={imgIdx} className="relative flex-1 min-w-0">
+                            <img
+                              src={img.url}
+                              alt={img.alt}
+                              draggable={false}
+                              onDragStart={(e) => e.preventDefault()}
+                              className="w-full h-auto rounded-lg border border-gray-200 shadow-sm"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removeImageFromRow(block.id, imgIdx)}
+                              className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                              title="이미지 삭제"
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        ))}
+                        {/* 이미지 추가 버튼 (최대 3개) */}
+                        {(block.images?.length || 0) < 3 && (
+                          <button
+                            type="button"
+                            onClick={() => handleAddToRowClick(block.id)}
+                            className="flex-shrink-0 w-10 self-stretch min-h-[60px] flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg text-gray-400 hover:border-primary-400 hover:text-primary-500 hover:bg-primary-50 transition-colors"
+                            title="이미지 추가"
+                            disabled={isUploading}
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                          </button>
+                        )}
                       </div>
                     ) : (
                       // 텍스트 블록 - 경계 없이 자연스럽게
