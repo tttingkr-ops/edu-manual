@@ -393,6 +393,7 @@ export default function MeetingDetail({
 
       if (error) throw error
 
+      router.refresh()
       router.push('/meetings')
     } catch (err: any) {
       console.error('Delete post error:', err)
