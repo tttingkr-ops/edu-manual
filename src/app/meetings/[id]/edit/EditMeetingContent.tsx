@@ -73,6 +73,7 @@ export default function EditMeetingContent({ post, subCategories }: EditMeetingC
 
       if (updateError) throw updateError
 
+      router.refresh()
       router.push(`/meetings/${post.id}`)
     } catch (err: any) {
       console.error('Error updating meeting post:', err)
