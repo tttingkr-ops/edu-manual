@@ -155,6 +155,7 @@ export default function NewMeetingPage() {
         if (optionsError) throw optionsError
       }
 
+      router.refresh()
       router.push('/meetings')
     } catch (err: any) {
       console.error('Error creating meeting post:', err)
