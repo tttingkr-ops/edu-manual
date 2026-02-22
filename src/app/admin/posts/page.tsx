@@ -16,6 +16,7 @@ export default async function PostsPage() {
     { data: postGroups },
     { data: postTargetUsers },
     { data: commentCounts },
+    { data: userGroups },
   ] = await Promise.all([
     supabase
       .from('educational_posts')
@@ -37,7 +38,18 @@ export default async function PostsPage() {
     supabase
       .from('education_comments')
       .select('post_id'),
+    supabase
+      .from('user_groups')
+      .select('user_id, group_name'),
   ])
+
+  // 매니저별 그룹 목록 맵 생성 (user_id → group_name[])
+  const managerGroupMap = new Map<string, string[]>()
+  for (const ug of (userGroups || [])) {
+    const groups = managerGroupMap.get(ug.user_id) || []
+    groups.push(ug.group_name)
+    managerGroupMap.set(ug.user_id, groups)
+  }
 
   // 각 게시물별 미확인 매니저 + 대상 지정 계산
   const postsWithUnread = (posts || []).map(post => {
@@ -47,8 +59,6 @@ export default async function PostsPage() {
         .map(r => r.user_id)
     )
 
-    const unreadManagers = (allManagers || []).filter(m => !readUserIds.has(m.id))
-
     const targetGroups = (postGroups || [])
       .filter(pg => pg.post_id === post.id)
       .map(pg => pg.group_name)
@@ -56,6 +66,22 @@ export default async function PostsPage() {
     const targetUserIds = (postTargetUsers || [])
       .filter(ptu => ptu.post_id === post.id)
       .map(ptu => ptu.user_id)
+
+    // 이 게시물의 실제 수신 대상 매니저만 필터링
+    let audienceManagers = (allManagers || [])
+    if (targetUserIds.length > 0) {
+      // 개인 지정: 지정된 유저만
+      audienceManagers = audienceManagers.filter(m => targetUserIds.includes(m.id))
+    } else if (targetGroups.length > 0) {
+      // 그룹 지정: 해당 그룹에 속한 매니저만
+      audienceManagers = audienceManagers.filter(m => {
+        const mGroups = managerGroupMap.get(m.id) || []
+        return targetGroups.some(g => mGroups.includes(g))
+      })
+    }
+    // 대상 없음(전체): audienceManagers = 전체 매니저 (변경 없음)
+
+    const unreadManagers = audienceManagers.filter(m => !readUserIds.has(m.id))
 
     const targetUsers = (allManagers || [])
       .filter(m => targetUserIds.includes(m.id))
