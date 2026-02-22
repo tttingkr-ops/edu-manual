@@ -4,7 +4,7 @@
 // Updated: 2026-02-10 - 동적 그룹 조회 및 개인 지정 타겟팅 추가
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -75,6 +75,21 @@ export default function NewPostPage() {
     }
     fetchData()
   }, [])
+
+  // 타겟팅/그룹 변경 시 카테고리 자동 유도
+  const categoryDeriveRef = useRef(false)
+  useEffect(() => {
+    if (!categoryDeriveRef.current) {
+      categoryDeriveRef.current = true
+      return
+    }
+    if (targetingType === 'individual') {
+      setFormData(prev => ({ ...prev, category: '개인_피드백' }))
+    } else if (selectedGroups.length > 0) {
+      const catMatch = CATEGORIES.find(c => c.label === selectedGroups[0])
+      if (catMatch) setFormData(prev => ({ ...prev, category: catMatch.value }))
+    }
+  }, [targetingType, selectedGroups])
 
   // 카테고리 변경 시 서브카테고리 초기화 (URL 파라미터로 설정된 초기값은 유지)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
@@ -316,26 +331,6 @@ export default function NewPostPage() {
               />
             </div>
 
-            {/* 카테고리 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                카테고리 <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={formData.category}
-                onChange={(e) =>
-                  setFormData({ ...formData, category: e.target.value as Category })
-                }
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              >
-                {CATEGORIES.map((cat) => (
-                  <option key={cat.value} value={cat.value}>
-                    {cat.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
             {/* 서브카테고리 (유형) */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -468,10 +463,7 @@ export default function NewPostPage() {
                     name="targeting_type"
                     value="individual"
                     checked={targetingType === 'individual'}
-                    onChange={() => {
-                      setTargetingType('individual')
-                      setFormData(prev => ({ ...prev, category: '개인_피드백' }))
-                    }}
+                    onChange={() => setTargetingType('individual')}
                     className="sr-only"
                   />
                   <div
@@ -514,7 +506,7 @@ export default function NewPostPage() {
                     ))
                   )}
                   <p className="mt-2 text-sm text-gray-500">
-                    이 교육 자료를 볼 수 있는 그룹을 선택하세요.
+                    선택한 그룹 탭에 자동으로 노출됩니다. 복수 선택 시 모든 탭에 노출됩니다.
                   </p>
                 </div>
               )}

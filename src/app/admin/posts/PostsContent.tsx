@@ -103,17 +103,28 @@ export default function PostsContent({ posts: initialPosts }: PostsContentProps)
   // 현재 카테고리의 서브카테고리
   const currentSubCategories = subCategories.filter(sc => sc.category === activeCategory)
 
+  // 탭 매칭 헬퍼: 게시물이 해당 카테고리 탭에 속하는지 판단
+  const matchesTab = (post: Post, category: Category): boolean => {
+    if (category === '개인_피드백') {
+      return post.targeting_type === 'individual' || post.category === '개인_피드백'
+    }
+    const catLabel = CATEGORIES.find(c => c.value === category)!.label
+    return post.targeting_type !== 'individual' && (
+      (post.targetGroups || []).some(g => g === catLabel)
+      || post.category === category // 기존 게시물 하위 호환
+    )
+  }
+
   // 현재 카테고리의 게시물
   const categoryPosts = posts.filter((post) => {
-    const matchesCategory = post.category === activeCategory
-    const matchesSubCategory = activeSubCategory === null || post.sub_category === activeSubCategory
-    const matchesSearch = post.title.toLowerCase().includes(searchTerm.toLowerCase())
-    return matchesCategory && matchesSubCategory && matchesSearch
+    return matchesTab(post, activeCategory)
+      && (activeSubCategory === null || post.sub_category === activeSubCategory)
+      && post.title.toLowerCase().includes(searchTerm.toLowerCase())
   })
 
   // 카테고리별 게시물 수
   const getCategoryCount = (category: Category) => {
-    return posts.filter((p) => p.category === category).length
+    return posts.filter(p => matchesTab(p, category)).length
   }
 
   // 서브카테고리 추가
@@ -404,7 +415,7 @@ export default function PostsContent({ posts: initialPosts }: PostsContentProps)
               >
                 {sc.name}
                 <span className="ml-1 text-xs opacity-70">
-                  ({posts.filter(p => p.category === activeCategory && p.sub_category === sc.name).length})
+                  ({posts.filter(p => matchesTab(p, activeCategory) && p.sub_category === sc.name).length})
                 </span>
               </button>
               <button
