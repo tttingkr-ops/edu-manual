@@ -21,6 +21,7 @@ interface PendingPost {
   author_id: string
   author_name: string
   author_nickname: string | null
+  recipients?: { name: string }[]
 }
 
 interface PendingPostsContentProps {
@@ -150,11 +151,19 @@ export default function PendingPostsContent({ posts: initialPosts }: PendingPost
                       )}
                     </div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-1">{post.title}</h3>
-                    <div className="flex items-center gap-3 text-sm text-gray-500">
+                    <div className="flex items-center gap-3 text-sm text-gray-500 flex-wrap">
                       <span>
-                        {post.targeting_type === 'individual' ? '수신자' : '작성자'}:{' '}
+                        작성자:{' '}
                         <span className="font-medium text-gray-700">{post.author_name}</span>
                       </span>
+                      {post.targeting_type === 'individual' && post.recipients && post.recipients.length > 0 && (
+                        <span>
+                          수신자:{' '}
+                          <span className="font-medium text-primary-700">
+                            {post.recipients.map(r => r.name).join(', ')}
+                          </span>
+                        </span>
+                      )}
                       <span>{formatDate(post.created_at)}</span>
                     </div>
                   </div>

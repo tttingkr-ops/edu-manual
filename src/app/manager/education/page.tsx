@@ -1,4 +1,5 @@
 // Created: 2026-01-27 16:30:00
+export const dynamic = 'force-dynamic'
 import { createClient } from '@/lib/supabase/server'
 import EducationContent from './EducationContent'
 

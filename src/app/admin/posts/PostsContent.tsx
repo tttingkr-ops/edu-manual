@@ -57,7 +57,13 @@ const CATEGORIES: { value: Category; label: string; color: string; bgColor: stri
 export default function PostsContent({ posts: initialPosts }: PostsContentProps) {
   const router = useRouter()
   const [posts, setPosts] = useState<Post[]>(initialPosts)
-  const [activeCategory, setActiveCategory] = useState<Category>(CATEGORIES[0].value)
+  const [activeCategory, setActiveCategory] = useState<Category>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('posts-active-category') as Category | null
+      if (saved && CATEGORIES.some(c => c.value === saved)) return saved
+    }
+    return CATEGORIES[0].value
+  })
   const [activeSubCategory, setActiveSubCategory] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -326,7 +332,7 @@ export default function PostsContent({ posts: initialPosts }: PostsContentProps)
           {CATEGORIES.map((cat) => (
             <button
               key={cat.value}
-              onClick={() => setActiveCategory(cat.value)}
+              onClick={() => { setActiveCategory(cat.value); localStorage.setItem('posts-active-category', cat.value) }}
               className={`flex-1 min-w-[150px] px-6 py-4 text-center border-b-2 transition-colors ${
                 activeCategory === cat.value
                   ? `border-current ${cat.color} bg-gray-50 font-semibold`

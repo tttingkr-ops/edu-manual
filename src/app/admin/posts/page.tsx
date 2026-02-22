@@ -1,6 +1,7 @@
 // Created: 2026-01-27 17:15:00
 // Updated: 2026-01-29 - 미확인 인원 데이터 조회 추가
 // Updated: 2026-02-18 - 대상 지정(그룹/개인) 데이터 조회 추가
+export const dynamic = 'force-dynamic'
 import { createClient } from '@/lib/supabase/server'
 import PostsContent from './PostsContent'
 
