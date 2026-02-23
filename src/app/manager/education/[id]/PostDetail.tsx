@@ -30,6 +30,7 @@ interface Post {
   created_at: string
   updated_at: string
   author_id: string
+  author_name?: string
 }
 
 interface RelatedQuestion {

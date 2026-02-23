@@ -52,7 +52,7 @@ export default async function MeetingsPage() {
 
   const postsWithCounts = (posts || []).map((post: any) => ({
     ...post,
-    author_name: post.users?.nickname || post.users?.username || '알 수 없음',
+    author_name: post.display_nickname || post.users?.nickname || post.users?.username || '알 수 없음',
     comment_count: commentCountMap[post.id] || 0,
     vote_count: voteCountMap[post.id] || 0,
   }))

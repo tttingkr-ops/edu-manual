@@ -27,10 +27,10 @@ export default async function PostDetailPage({ params }: PageProps) {
     .eq('id', user.id)
     .single()
 
-  // 게시물 조회
+  // 게시물 조회 (작성자 정보 포함)
   const { data: post, error } = await supabase
     .from('educational_posts')
-    .select('*')
+    .select('*, users!educational_posts_author_id_fkey(username, nickname)')
     .eq('id', id)
     .single()
 
@@ -63,7 +63,10 @@ export default async function PostDetailPage({ params }: PageProps) {
 
   return (
     <PostDetail
-      post={post}
+      post={{
+        ...post,
+        author_name: (post as any).display_nickname || (post as any).users?.nickname || (post as any).users?.username || '알 수 없음',
+      }}
       userId={user.id}
       userRole={userData?.role || 'manager'}
       hasRelatedTest={(relatedQuestions?.length || 0) > 0}

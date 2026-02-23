@@ -63,6 +63,7 @@ export interface Database {
           images: Json;
           test_visibility: 'all' | 'targeted';
           approval_status: 'approved' | 'pending';
+          display_nickname: string | null;
         };
         Insert: {
           id?: string;
@@ -79,6 +80,7 @@ export interface Database {
           images?: Json;
           test_visibility?: 'all' | 'targeted';
           approval_status?: 'approved' | 'pending';
+          display_nickname?: string | null;
         };
         Update: {
           id?: string;
@@ -95,6 +97,7 @@ export interface Database {
           images?: Json;
           test_visibility?: 'all' | 'targeted';
           approval_status?: 'approved' | 'pending';
+          display_nickname?: string | null;
         };
         Relationships: [
           {
@@ -514,6 +517,7 @@ export interface Database {
           sub_category: string | null;
           created_at: string;
           updated_at: string;
+          display_nickname: string | null;
         };
         Insert: {
           id?: string;
@@ -529,6 +533,7 @@ export interface Database {
           sub_category?: string | null;
           created_at?: string;
           updated_at?: string;
+          display_nickname?: string | null;
         };
         Update: {
           id?: string;
@@ -544,6 +549,7 @@ export interface Database {
           sub_category?: string | null;
           created_at?: string;
           updated_at?: string;
+          display_nickname?: string | null;
         };
         Relationships: [
           {

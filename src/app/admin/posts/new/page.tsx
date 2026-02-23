@@ -52,6 +52,8 @@ export default function NewPostPage() {
   const [isAddingNewSubCategory, setIsAddingNewSubCategory] = useState(false)
   const [newSubCategoryName, setNewSubCategoryName] = useState('')
   const [externalLink, setExternalLink] = useState('')
+  const [nicknames, setNicknames] = useState<string[]>([])
+  const [selectedNickname, setSelectedNickname] = useState('')
   const validCategories: Category[] = ['남자_매니저_대화', '여자_매니저_대화', '여자_매니저_소개', '추가_서비스_규칙', '개인_피드백']
   const initialCategory = (urlCategory && validCategories.includes(urlCategory)) ? urlCategory : '남자_매니저_대화'
   const [formData, setFormData] = useState({
@@ -64,14 +66,16 @@ export default function NewPostPage() {
   // 서브카테고리, 그룹, 매니저 목록 조회
   useEffect(() => {
     const fetchData = async () => {
-      const [{ data: subCatData }, { data: groupsData }, { data: managersData }] = await Promise.all([
+      const [{ data: subCatData }, { data: groupsData }, { data: managersData }, { data: nicknameUsers }] = await Promise.all([
         supabase.from('sub_categories').select('*').order('sort_order').order('name'),
         supabase.from('groups').select('id, name').order('name'),
         supabase.from('users').select('id, username, nickname').eq('role', 'manager').order('username'),
+        supabase.from('users').select('nickname').not('nickname', 'is', null),
       ])
       setSubCategories(subCatData || [])
       setGroups(groupsData || [])
       setManagers(managersData || [])
+      setNicknames((nicknameUsers || []).map((u: any) => u.nickname).filter(Boolean))
     }
     fetchData()
   }, [])
@@ -214,6 +218,7 @@ export default function NewPostPage() {
           sub_category: selectedSubCategory || null,
           external_link: externalLink.trim() || null,
           author_id: user.id,
+          display_nickname: selectedNickname || null,
           targeting_type: targetingType,
           test_visibility: (targetingType === 'individual' && includeTest) ? testVisibility : 'all',
         })
@@ -316,6 +321,25 @@ export default function NewPostPage() {
           <h2 className="text-lg font-semibold text-gray-900 mb-4">기본 정보</h2>
 
           <div className="space-y-4">
+            {/* 작성자 닉네임 */}
+            {nicknames.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  작성자 표시 <span className="text-gray-400 text-xs font-normal">(선택사항)</span>
+                </label>
+                <select
+                  value={selectedNickname}
+                  onChange={e => setSelectedNickname(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
+                >
+                  <option value="">선택 안 함 (기본 닉네임 표시)</option>
+                  {nicknames.map(nick => (
+                    <option key={nick} value={nick}>{nick}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* 제목 */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">

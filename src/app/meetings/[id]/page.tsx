@@ -87,7 +87,7 @@ export default async function MeetingDetailPage({
     <MeetingDetail
       post={{
         ...post,
-        author_name: post.users?.nickname || post.users?.username || '알 수 없음',
+        author_name: post.display_nickname || post.users?.nickname || post.users?.username || '알 수 없음',
       }}
       comments={(comments || []).map((c: any) => ({
         ...c,

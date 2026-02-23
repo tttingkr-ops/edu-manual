@@ -21,6 +21,10 @@ export default function NewMeetingPage() {
   const [error, setError] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
 
+  // 닉네임
+  const [nicknames, setNicknames] = useState<string[]>([])
+  const [selectedNickname, setSelectedNickname] = useState('')
+
   // Form state
   const [title, setTitle] = useState('')
   const [postType, setPostType] = useState<PostType>('free')
@@ -58,8 +62,16 @@ export default function NewMeetingPage() {
         .order('name')
       setSubCategories(data || [])
     }
+    const fetchNicknames = async () => {
+      const { data } = await supabase
+        .from('users')
+        .select('nickname')
+        .not('nickname', 'is', null)
+      setNicknames((data || []).map((u: any) => u.nickname).filter(Boolean))
+    }
     getUser()
     fetchSubCategories()
+    fetchNicknames()
   }, [])
 
   const addOption = () => {
@@ -111,6 +123,7 @@ export default function NewMeetingPage() {
         priority: priority || null,
         deadline: deadline || null,
         sub_category: subCategory || null,
+        display_nickname: selectedNickname || null,
       }
 
       if (postType === 'free') {
@@ -182,6 +195,25 @@ export default function NewMeetingPage() {
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
             <p className="text-sm text-red-600">{error}</p>
+          </div>
+        )}
+
+        {/* 작성자 닉네임 */}
+        {nicknames.length > 0 && (
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              작성자 표시 <span className="text-gray-400 text-xs font-normal">(선택사항)</span>
+            </label>
+            <select
+              value={selectedNickname}
+              onChange={e => setSelectedNickname(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
+            >
+              <option value="">선택 안 함 (기본 닉네임 표시)</option>
+              {nicknames.map(nick => (
+                <option key={nick} value={nick}>{nick}</option>
+              ))}
+            </select>
           </div>
         )}
 
