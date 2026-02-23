@@ -168,8 +168,8 @@ export default function NewMeetingPage() {
         if (optionsError) throw optionsError
       }
 
-      router.refresh()
       router.push('/meetings')
+      router.refresh()
     } catch (err: any) {
       console.error('Error creating meeting post:', err)
       setError(err.message || '안건 등록 중 오류가 발생했습니다.')

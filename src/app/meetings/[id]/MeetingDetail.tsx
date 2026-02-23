@@ -393,8 +393,8 @@ export default function MeetingDetail({
 
       if (error) throw error
 
-      router.refresh()
       router.push('/meetings')
+      router.refresh()
     } catch (err: any) {
       console.error('Delete post error:', err)
       alert('안건 삭제 중 오류가 발생했습니다.')

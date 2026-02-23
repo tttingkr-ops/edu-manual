@@ -77,8 +77,8 @@ export default function EditMeetingContent({ post, subCategories, nicknames }: E
 
       if (updateError) throw updateError
 
-      router.refresh()
       router.push(`/meetings/${post.id}`)
+      router.refresh()
     } catch (err: any) {
       console.error('Error updating meeting post:', err)
       setError(err.message || '수정 중 오류가 발생했습니다.')
