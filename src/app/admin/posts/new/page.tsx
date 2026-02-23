@@ -284,8 +284,8 @@ export default function NewPostPage() {
         }
       }
 
-      router.refresh()
       router.push('/admin/posts')
+      router.refresh()
     } catch (err: any) {
       console.error('Error creating post:', err)
       setError(err.message || '등록 중 오류가 발생했습니다.')

@@ -196,8 +196,8 @@ export default function ManagerNewPostPage() {
       }
 
       alert('게시글이 관리자 승인 대기 상태로 등록되었습니다.')
-      router.refresh()
       router.push('/manager/education')
+      router.refresh()
     } catch (err: any) {
       console.error('Error creating post:', err)
       setError(err.message || '등록 중 오류가 발생했습니다.')

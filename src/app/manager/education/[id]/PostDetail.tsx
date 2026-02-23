@@ -209,8 +209,8 @@ export default function PostDetail({
 
       if (error) throw error
 
-      router.refresh()
       router.push('/manager/education')
+      router.refresh()
     } catch (err: any) {
       console.error('Delete post error:', err)
       alert('게시물 삭제 중 오류가 발생했습니다.')

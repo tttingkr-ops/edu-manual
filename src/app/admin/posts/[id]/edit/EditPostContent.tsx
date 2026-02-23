@@ -263,8 +263,8 @@ export default function EditPostContent({ post, initialGroups, initialTargetUser
         if (questionError) console.error('Question save error:', questionError)
       }
 
-      router.refresh()
       router.push(approveAfterSave ? '/admin/posts/pending' : '/admin/posts')
+      router.refresh()
     } catch (err: any) {
       console.error('Error updating post:', err)
       setError(err.message || '수정 중 오류가 발생했습니다.')
@@ -295,8 +295,8 @@ export default function EditPostContent({ post, initialGroups, initialTargetUser
 
       if (deleteError) throw deleteError
 
-      router.refresh()
       router.push('/admin/posts')
+      router.refresh()
     } catch (err: any) {
       console.error('Error deleting post:', err)
       alert(err.message || '삭제 중 오류가 발생했습니다.')
