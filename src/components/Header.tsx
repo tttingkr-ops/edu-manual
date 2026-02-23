@@ -27,6 +27,7 @@ export default function Header({ userName, userRole }: HeaderProps) {
     { href: '/manager/test', label: '테스트' },
     { href: '/manager/my-progress', label: '학습 현황' },
     { href: '/meetings', label: '회의 안건방' },
+    { href: '/manager/best-practices', label: '모범사례' },
   ]
 
   const adminNavItems = [
@@ -35,6 +36,7 @@ export default function Header({ userName, userRole }: HeaderProps) {
     { href: '/admin/tests', label: '테스트 관리' },
     { href: '/admin/users', label: '사용자 관리' },
     { href: '/meetings', label: '회의 안건방' },
+    { href: '/admin/best-practices', label: '모범사례' },
     { href: '/admin/matching', label: '소개성과측정' },
   ]
 

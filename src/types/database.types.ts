@@ -304,6 +304,57 @@ export interface Database {
           }
         ];
       };
+      best_practice_posts: {
+        Row: {
+          id: string;
+          title: string;
+          content: string;
+          situation_tag: string | null;
+          author_id: string | null;
+          targeting_type: 'group' | 'individual';
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          title: string;
+          content?: string;
+          situation_tag?: string | null;
+          author_id?: string | null;
+          targeting_type?: 'group' | 'individual';
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          title?: string;
+          content?: string;
+          situation_tag?: string | null;
+          author_id?: string | null;
+          targeting_type?: 'group' | 'individual';
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      best_practice_groups: {
+        Row: { id: string; post_id: string; group_name: string };
+        Insert: { id?: string; post_id: string; group_name: string };
+        Update: { id?: string; post_id?: string; group_name?: string };
+        Relationships: [];
+      };
+      best_practice_target_users: {
+        Row: { id: string; post_id: string; user_id: string };
+        Insert: { id?: string; post_id: string; user_id: string };
+        Update: { id?: string; post_id?: string; user_id?: string };
+        Relationships: [];
+      };
+      best_practice_read_status: {
+        Row: { id: string; post_id: string; user_id: string; is_read: boolean; read_at: string | null };
+        Insert: { id?: string; post_id: string; user_id: string; is_read?: boolean; read_at?: string | null };
+        Update: { id?: string; post_id?: string; user_id?: string; is_read?: boolean; read_at?: string | null };
+        Relationships: [];
+      };
       sub_categories: {
         Row: {
           id: string;
