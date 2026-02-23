@@ -24,20 +24,23 @@ export default async function EditPostPage({ params }: PageProps) {
     notFound()
   }
 
-  // 그룹 데이터 및 개인 타겟 데이터 조회
-  const [{ data: postGroups }, { data: targetUsers }] = await Promise.all([
+  // 그룹 데이터, 개인 타겟 데이터, 닉네임 조회
+  const [{ data: postGroups }, { data: targetUsers }, { data: nicknameUsers }] = await Promise.all([
     supabase.from('post_groups').select('group_name').eq('post_id', id),
     supabase.from('post_target_users').select('user_id').eq('post_id', id),
+    supabase.from('users').select('nickname').not('nickname', 'is', null),
   ])
 
   const initialGroups = (postGroups || []).map(pg => pg.group_name)
   const initialTargetUsers = (targetUsers || []).map(t => t.user_id)
+  const nicknames = (nicknameUsers || []).map((u: any) => u.nickname).filter(Boolean) as string[]
 
   return (
     <EditPostContent
       post={post}
       initialGroups={initialGroups}
       initialTargetUsers={initialTargetUsers}
+      nicknames={nicknames}
     />
   )
 }

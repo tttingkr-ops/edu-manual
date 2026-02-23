@@ -25,6 +25,7 @@ interface Post {
   created_at: string
   updated_at: string
   author_id: string
+  display_nickname: string | null
 }
 
 interface SubCategory {
@@ -38,6 +39,7 @@ interface EditPostContentProps {
   post: Post & { targeting_type?: 'group' | 'individual'; approval_status?: 'approved' | 'pending' }
   initialGroups: string[]
   initialTargetUsers: string[]
+  nicknames: string[]
 }
 
 const CATEGORIES: { value: Category; label: string }[] = [
@@ -48,7 +50,7 @@ const CATEGORIES: { value: Category; label: string }[] = [
   { value: '개인_피드백', label: '개인 피드백' },
 ]
 
-export default function EditPostContent({ post, initialGroups, initialTargetUsers }: EditPostContentProps) {
+export default function EditPostContent({ post, initialGroups, initialTargetUsers, nicknames }: EditPostContentProps) {
   const router = useRouter()
   const supabase = createClient()
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -68,6 +70,7 @@ export default function EditPostContent({ post, initialGroups, initialTargetUser
   const [questions, setQuestions] = useState<QuestionData[]>([])
   const [testVisibility, setTestVisibility] = useState<'all' | 'targeted'>('all')
   const [uploadedImages, setUploadedImages] = useState<string[]>([])
+  const [selectedNickname, setSelectedNickname] = useState(post.display_nickname || '')
   const [formData, setFormData] = useState({
     title: post.title,
     content_type: post.content_type,
@@ -205,6 +208,7 @@ export default function EditPostContent({ post, initialGroups, initialTargetUser
         external_link: externalLink.trim() || null,
         targeting_type: targetingType,
         test_visibility: (targetingType === 'individual' && includeTest) ? testVisibility : 'all',
+        display_nickname: selectedNickname || null,
       }
 
       if (approveAfterSave) {
@@ -361,6 +365,25 @@ export default function EditPostContent({ post, initialGroups, initialTargetUser
           <h2 className="text-lg font-semibold text-gray-900 mb-4">기본 정보</h2>
 
           <div className="space-y-4">
+            {/* 작성자 닉네임 */}
+            {nicknames.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  작성자 표시 <span className="text-gray-400 text-xs font-normal">(선택사항)</span>
+                </label>
+                <select
+                  value={selectedNickname}
+                  onChange={e => setSelectedNickname(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
+                >
+                  <option value="">선택 안 함 (기본 닉네임 표시)</option>
+                  {nicknames.map(nick => (
+                    <option key={nick} value={nick}>{nick}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* 제목 */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">

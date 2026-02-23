@@ -298,6 +298,9 @@ export default function PostDetail({
 
           {/* 메타 정보 */}
           <div className="flex items-center gap-4 text-sm text-gray-500">
+            {post.author_name && post.category !== '개인_피드백' && (
+              <span className="font-medium text-gray-700">{post.author_name}</span>
+            )}
             <span>작성일: {formatDate(post.created_at)}</span>
             {post.updated_at !== post.created_at && (
               <span>수정일: {formatDate(post.updated_at)}</span>
