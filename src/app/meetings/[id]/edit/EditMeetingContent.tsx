@@ -17,6 +17,7 @@ interface MeetingPost {
   priority: string | null
   deadline: string | null
   sub_category: string | null
+  display_nickname: string | null
 }
 
 interface SubCategory {
@@ -27,6 +28,7 @@ interface SubCategory {
 interface EditMeetingContentProps {
   post: MeetingPost
   subCategories: SubCategory[]
+  nicknames: string[]
 }
 
 const PRIORITY_OPTIONS: { value: Priority; label: string; color: string }[] = [
@@ -37,7 +39,7 @@ const PRIORITY_OPTIONS: { value: Priority; label: string; color: string }[] = [
   { value: 'low', label: '낮음', color: 'text-gray-500' },
 ]
 
-export default function EditMeetingContent({ post, subCategories }: EditMeetingContentProps) {
+export default function EditMeetingContent({ post, subCategories, nicknames }: EditMeetingContentProps) {
   const router = useRouter()
   const supabase = createClient()
 
@@ -46,6 +48,7 @@ export default function EditMeetingContent({ post, subCategories }: EditMeetingC
   const [priority, setPriority] = useState<Priority>((post.priority as Priority) || '')
   const [deadline, setDeadline] = useState(post.deadline ? post.deadline.split('T')[0] : '')
   const [subCategory, setSubCategory] = useState(post.sub_category || '')
+  const [selectedNickname, setSelectedNickname] = useState(post.display_nickname || '')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -68,6 +71,7 @@ export default function EditMeetingContent({ post, subCategories }: EditMeetingC
           priority: priority || null,
           deadline: deadline || null,
           sub_category: subCategory || null,
+          display_nickname: selectedNickname || null,
         })
         .eq('id', post.id)
 
@@ -113,6 +117,25 @@ export default function EditMeetingContent({ post, subCategories }: EditMeetingC
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
+          {/* 작성자 닉네임 */}
+          {nicknames.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                작성자 표시 <span className="text-gray-400 text-xs font-normal">(선택사항)</span>
+              </label>
+              <select
+                value={selectedNickname}
+                onChange={e => setSelectedNickname(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
+              >
+                <option value="">선택 안 함 (기본 닉네임 표시)</option>
+                {nicknames.map(nick => (
+                  <option key={nick} value={nick}>{nick}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* 제목 */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
