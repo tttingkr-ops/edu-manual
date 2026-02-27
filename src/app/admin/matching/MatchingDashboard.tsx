@@ -419,34 +419,25 @@ export default function MatchingDashboard() {
   const fetchDbStats = useCallback(async () => {
     setIsLoadingStats(true)
     try {
-      const [introRes, matchingRes] = await Promise.all([
-        supabase
-          .from('intro_records')
-          .select('record_date')
-          .order('record_date', { ascending: true }),
-        supabase
-          .from('matching_records')
-          .select('matching_date')
-          .order('matching_date', { ascending: true }),
+      const [introMin, introMax, introCount, matchingMin, matchingMax, matchingCount] = await Promise.all([
+        supabase.from('intro_records').select('record_date').order('record_date', { ascending: true }).limit(1),
+        supabase.from('intro_records').select('record_date').order('record_date', { ascending: false }).limit(1),
+        supabase.from('intro_records').select('*', { count: 'exact', head: true }),
+        supabase.from('matching_records').select('matching_date').order('matching_date', { ascending: true }).limit(1),
+        supabase.from('matching_records').select('matching_date').order('matching_date', { ascending: false }).limit(1),
+        supabase.from('matching_records').select('*', { count: 'exact', head: true }),
       ])
-
-      const introDates = (introRes.data || [])
-        .map((r: any) => r.record_date as string)
-        .filter(Boolean)
-      const matchingDates = (matchingRes.data || [])
-        .map((r: any) => r.matching_date as string)
-        .filter(Boolean)
 
       setDbStats({
         intro: {
-          minDate: introDates.length > 0 ? introDates[0] : null,
-          maxDate: introDates.length > 0 ? introDates[introDates.length - 1] : null,
-          count: introDates.length,
+          minDate: introMin.data?.[0]?.record_date ?? null,
+          maxDate: introMax.data?.[0]?.record_date ?? null,
+          count: introCount.count ?? 0,
         },
         matching: {
-          minDate: matchingDates.length > 0 ? matchingDates[0] : null,
-          maxDate: matchingDates.length > 0 ? matchingDates[matchingDates.length - 1] : null,
-          count: matchingDates.length,
+          minDate: matchingMin.data?.[0]?.matching_date ?? null,
+          maxDate: matchingMax.data?.[0]?.matching_date ?? null,
+          count: matchingCount.count ?? 0,
         },
       })
     } catch (err) {
