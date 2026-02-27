@@ -531,7 +531,7 @@ export default function MatchingDashboard() {
       const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
       const parsed: any[] = XLSX.utils.sheet_to_json(firstSheet)
 
-      const rows = parsed.map(row => {
+      const rowsRaw = parsed.map(row => {
         const introDateRaw = row['소개시점']
         const introDateStr = typeof introDateRaw === 'number'
           ? (formatExcelDate(introDateRaw) ?? '')
@@ -548,6 +548,14 @@ export default function MatchingDashboard() {
           raw_data: row,
         }
       })
+
+      // 파일 내 중복 제거 (intro_date+no_f+no_m 기준, 마지막 행 우선)
+      const dedupeMap = new Map<string, typeof rowsRaw[0]>()
+      rowsRaw.forEach(r => {
+        const key = `${r.intro_date}|${r.no_f}|${r.no_m}`
+        dedupeMap.set(key, r)
+      })
+      const rows = Array.from(dedupeMap.values())
 
       if (rows.length === 0) {
         setMatchingUpload({ state: 'error', message: '유효한 데이터가 없습니다.' })
