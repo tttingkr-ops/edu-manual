@@ -549,10 +549,10 @@ export default function MatchingDashboard() {
         }
       })
 
-      // 파일 내 중복 제거 (intro_date+no_f+no_m 기준, 마지막 행 우선)
+      // 파일 내 중복 제거 (intro_date+no_f+no_m+matching_date 기준, 마지막 행 우선)
       const dedupeMap = new Map<string, typeof rowsRaw[0]>()
       rowsRaw.forEach(r => {
-        const key = `${r.intro_date}|${r.no_f}|${r.no_m}`
+        const key = `${r.intro_date}|${r.no_f}|${r.no_m}|${r.matching_date}`
         dedupeMap.set(key, r)
       })
       const rows = Array.from(dedupeMap.values())
@@ -569,7 +569,7 @@ export default function MatchingDashboard() {
         const batch = rows.slice(i, i + UPSERT_BATCH_SIZE)
         const { error } = await supabase
           .from('matching_records')
-          .upsert(batch, { onConflict: 'intro_date,no_f,no_m' })
+          .upsert(batch, { onConflict: 'intro_date,no_f,no_m,matching_date' })
         if (error) throw error
         upsertedCount += batch.length
         setMatchingUpload({
