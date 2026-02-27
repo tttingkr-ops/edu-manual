@@ -540,7 +540,7 @@ export default function MatchingDashboard() {
         const matchingDateStr = formatExcelDate(row['날짜'])
 
         return {
-          matching_date: matchingDateStr || null,
+          matching_date: matchingDateStr || '1900-01-01',
           intro_date: introDateStr,
           no_f: row['no.'] ? String(row['no.']) : '',
           no_m: row['no..1'] ? String(row['no..1']) : '',
