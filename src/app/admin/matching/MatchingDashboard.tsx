@@ -54,6 +54,22 @@ interface UploadStatus {
   message: string
 }
 
+interface IntroRecord {
+  record_date: string
+  no_code: string
+  manager: string | null
+  staff: string | null
+  raw_data: Record<string, any>
+}
+
+interface IntroManagerStat {
+  manager: string
+  total: number
+  side: number
+  talk: number
+  ratio: number
+}
+
 // =====================================================
 // 유틸리티 함수 (원본 로직 그대로)
 // =====================================================
@@ -358,7 +374,7 @@ export default function MatchingDashboard() {
   const supabase = createClient()
 
   // 탭
-  const [activeTab, setActiveTab] = useState<'manage' | 'analyze'>('manage')
+  const [activeTab, setActiveTab] = useState<'manage' | 'analyze' | 'intro-status'>('manage')
 
   // DB 통계 (날짜 범위 + 건수)
   const [dbStats, setDbStats] = useState<DbStats | null>(null)
@@ -384,6 +400,18 @@ export default function MatchingDashboard() {
   const [selectedStaff, setSelectedStaff] = useState('')
   const [aggregation, setAggregation] = useState('daily')
   const [dayTypeFilter, setDayTypeFilter] = useState('all')
+
+  // 소개 현황 탭 전용 상태
+  const INTRO_PAGE_SIZE = 50
+  const [introStatusData, setIntroStatusData] = useState<IntroRecord[] | null>(null)
+  const [introPrevData, setIntroPrevData] = useState<IntroRecord[] | null>(null)
+  const [introStatusLoading, setIntroStatusLoading] = useState(false)
+  const [introStartDate, setIntroStartDate] = useState('')
+  const [introEndDate, setIntroEndDate] = useState('')
+  const [introManagerFilter, setIntroManagerFilter] = useState('')
+  const [introPage, setIntroPage] = useState(1)
+  const [introSortKey, setIntroSortKey] = useState<'total' | 'side' | 'talk' | 'ratio'>('total')
+  const [introSortDir, setIntroSortDir] = useState<'asc' | 'desc'>('desc')
 
   // -------------------------------------------------------
   // DB 통계 불러오기
@@ -580,7 +608,7 @@ export default function MatchingDashboard() {
       const [introRes, matchingRes] = await Promise.all([
         supabase
           .from('intro_records')
-          .select('raw_data')
+          .select('record_date, raw_data')
           .gte('record_date', prevStartStr)
           .lte('record_date', endDate),
         supabase
@@ -593,12 +621,61 @@ export default function MatchingDashboard() {
       if (introRes.error) throw introRes.error
       if (matchingRes.error) throw matchingRes.error
 
-      setIntroData((introRes.data || []).map((r: any) => r.raw_data))
+      setIntroData((introRes.data || []).map((r: any) => ({ ...r.raw_data, _date: r.record_date })))
       setMatchingData((matchingRes.data || []).map((r: any) => r.raw_data))
     } catch (err: any) {
       alert('데이터 로드 실패: ' + err.message)
     } finally {
       setIsLoadingAnalysis(false)
+    }
+  }
+
+  // -------------------------------------------------------
+  // 소개 현황 데이터 로드
+  // -------------------------------------------------------
+  const handleLoadIntroStatus = async () => {
+    if (!introStartDate || !introEndDate) {
+      alert('시작일과 종료일을 입력해주세요.')
+      return
+    }
+
+    const start = new Date(introStartDate)
+    const end = new Date(introEndDate)
+    const periodDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
+    const prevEnd = new Date(start)
+    prevEnd.setDate(prevEnd.getDate() - 1)
+    const prevStart = new Date(prevEnd)
+    prevStart.setDate(prevStart.getDate() - periodDays + 1)
+    const prevStartStr = prevStart.toISOString().slice(0, 10)
+    const prevEndStr = prevEnd.toISOString().slice(0, 10)
+
+    setIntroStatusLoading(true)
+    try {
+      const [currRes, prevRes] = await Promise.all([
+        supabase
+          .from('intro_records')
+          .select('record_date, no_code, manager, staff, raw_data')
+          .gte('record_date', introStartDate)
+          .lte('record_date', introEndDate)
+          .order('record_date', { ascending: false }),
+        supabase
+          .from('intro_records')
+          .select('record_date, no_code, manager, staff, raw_data')
+          .gte('record_date', prevStartStr)
+          .lte('record_date', prevEndStr)
+          .order('record_date', { ascending: false }),
+      ])
+
+      if (currRes.error) throw currRes.error
+      if (prevRes.error) throw prevRes.error
+
+      setIntroStatusData(currRes.data as IntroRecord[])
+      setIntroPrevData(prevRes.data as IntroRecord[])
+      setIntroPage(1)
+    } catch (err: any) {
+      alert('데이터 로드 실패: ' + err.message)
+    } finally {
+      setIntroStatusLoading(false)
     }
   }
 
@@ -662,6 +739,71 @@ export default function MatchingDashboard() {
     })
   }, [introData, matchingData, startDate, endDate, selectedStaff, aggregation, dayTypeFilter, currentDateBasis])
 
+  const computedIntroStats = useMemo(() => {
+    if (!introStatusData) return null
+
+    const filtered = introManagerFilter
+      ? introStatusData.filter(r => r.manager === introManagerFilter)
+      : introStatusData
+
+    let totalCount = 0
+    let sideCount = 0
+    let talkCount = 0
+    filtered.forEach(r => {
+      totalCount++
+      if (SIDE_INTRO_VALUES.includes(r.raw_data?.['한쪽'])) sideCount++
+      if (TALK_INTRO_VALUES.includes(r.raw_data?.['알림톡'])) talkCount++
+    })
+
+    let prevTotal = 0
+    let prevSide = 0
+    let prevTalk = 0
+    if (introPrevData) {
+      const prevFiltered = introManagerFilter
+        ? introPrevData.filter(r => r.manager === introManagerFilter)
+        : introPrevData
+      prevFiltered.forEach(r => {
+        prevTotal++
+        if (SIDE_INTRO_VALUES.includes(r.raw_data?.['한쪽'])) prevSide++
+        if (TALK_INTRO_VALUES.includes(r.raw_data?.['알림톡'])) prevTalk++
+      })
+    }
+
+    const managerMap: Record<string, { total: number; side: number; talk: number }> = {}
+    introStatusData.forEach(r => {
+      const mgr = r.manager || '미지정'
+      if (!managerMap[mgr]) managerMap[mgr] = { total: 0, side: 0, talk: 0 }
+      managerMap[mgr].total++
+      if (SIDE_INTRO_VALUES.includes(r.raw_data?.['한쪽'])) managerMap[mgr].side++
+      if (TALK_INTRO_VALUES.includes(r.raw_data?.['알림톡'])) managerMap[mgr].talk++
+    })
+
+    const managerStats: IntroManagerStat[] = Object.entries(managerMap).map(([manager, stat]) => ({
+      manager,
+      ...stat,
+      ratio: introStatusData.length > 0 ? (stat.total / introStatusData.length) * 100 : 0,
+    }))
+
+    managerStats.sort((a, b) => {
+      const diff = a[introSortKey] - b[introSortKey]
+      return introSortDir === 'desc' ? -diff : diff
+    })
+
+    const managers = Array.from(new Set(introStatusData.map(r => r.manager).filter(Boolean))) as string[]
+
+    const totalPages = Math.ceil(filtered.length / INTRO_PAGE_SIZE)
+    const pageData = filtered.slice((introPage - 1) * INTRO_PAGE_SIZE, introPage * INTRO_PAGE_SIZE)
+
+    return {
+      totalCount, sideCount, talkCount,
+      prevTotal, prevSide, prevTalk,
+      totalChange: calcChange(totalCount, prevTotal),
+      sideChange: calcChange(sideCount, prevSide),
+      talkChange: calcChange(talkCount, prevTalk),
+      managerStats, managers, filtered, pageData, totalPages,
+    }
+  }, [introStatusData, introPrevData, introManagerFilter, introPage, introSortKey, introSortDir])
+
   const changeIcon = (c: ChangeResult) => {
     if (c.direction === 'none') return null
     return c.direction === 'up'
@@ -706,10 +848,11 @@ export default function MatchingDashboard() {
         {[
           { key: 'manage', label: '📦 데이터 관리' },
           { key: 'analyze', label: '📊 성과 분석' },
+          { key: 'intro-status', label: '📋 소개 현황' },
         ].map(tab => (
           <button
             key={tab.key}
-            onClick={() => setActiveTab(tab.key as 'manage' | 'analyze')}
+            onClick={() => setActiveTab(tab.key as 'manage' | 'analyze' | 'intro-status')}
             className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
               activeTab === tab.key
                 ? 'border-violet-600 text-violet-700'
@@ -1170,6 +1313,264 @@ export default function MatchingDashboard() {
                     ? ((processedData.debug.joinSuccess / processedData.debug.totalMatchingN) * 100).toFixed(1)
                     : 0}%
                 </span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ==================== 소개 현황 탭 ==================== */}
+      {activeTab === 'intro-status' && (
+        <div className="space-y-6">
+          {/* 필터 패널 */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+            <h2 className="text-sm font-semibold text-gray-700 mb-4">조회 기간 설정</h2>
+            <div className="flex flex-wrap items-end gap-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">시작 날짜</label>
+                <input
+                  type="date" value={introStartDate}
+                  onChange={e => setIntroStartDate(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">종료 날짜</label>
+                <input
+                  type="date" value={introEndDate}
+                  onChange={e => setIntroEndDate(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
+                />
+              </div>
+              {computedIntroStats && (
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">매니저 필터</label>
+                  <select
+                    value={introManagerFilter}
+                    onChange={e => { setIntroManagerFilter(e.target.value); setIntroPage(1) }}
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-violet-500"
+                  >
+                    <option value="">전체</option>
+                    {computedIntroStats.managers.map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <button
+                onClick={handleLoadIntroStatus}
+                disabled={introStatusLoading || !introStartDate || !introEndDate}
+                className="px-5 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {introStatusLoading ? '불러오는 중...' : '데이터 불러오기'}
+              </button>
+              {introStatusData && (
+                <span className="text-xs text-green-600 font-medium">
+                  ✅ {introStatusData.length.toLocaleString()}건 로드됨
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* 안내 메시지 */}
+          {!introStatusData && (
+            <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+              <div className="text-5xl mb-4">📋</div>
+              <p className="text-gray-500">날짜 범위를 설정하고 <strong>데이터 불러오기</strong>를 클릭하세요.</p>
+            </div>
+          )}
+
+          {/* 대시보드 */}
+          {computedIntroStats && (
+            <div className="space-y-6">
+              {/* KPI 카드 */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {[
+                  {
+                    label: '총 소개 건수',
+                    value: computedIntroStats.totalCount.toLocaleString(),
+                    change: computedIntroStats.totalChange,
+                  },
+                  {
+                    label: '한쪽 소개 건수',
+                    value: computedIntroStats.sideCount.toLocaleString(),
+                    change: computedIntroStats.sideChange,
+                  },
+                  {
+                    label: '알림톡 소개 건수',
+                    value: computedIntroStats.talkCount.toLocaleString(),
+                    change: computedIntroStats.talkChange,
+                  },
+                ].map(kpi => (
+                  <div key={kpi.label} className="bg-gradient-to-br from-violet-500 to-purple-700 text-white rounded-xl p-5 shadow-md">
+                    <p className="text-sm opacity-90 mb-2">{kpi.label}</p>
+                    <p className="text-3xl font-bold mb-1">{kpi.value}</p>
+                    <p className="text-xs opacity-80">
+                      {kpi.change.direction !== 'none' ? (
+                        <>
+                          {kpi.change.direction === 'up'
+                            ? <span className="text-green-300">▲ {kpi.change.value}%</span>
+                            : <span className="text-red-300">▼ {kpi.change.value}%</span>
+                          }{' '}이전 기간 대비
+                        </>
+                      ) : '이전 기간 대비'}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {/* 매니저별 통계 테이블 */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="p-5 border-b border-gray-200">
+                  <h2 className="text-base font-semibold text-gray-900">👤 매니저별 소개 통계</h2>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gradient-to-r from-violet-500 to-purple-700 text-white">
+                      <tr>
+                        {[
+                          { key: null, label: '매니저' },
+                          { key: 'total' as const, label: '소개 건수' },
+                          { key: 'side' as const, label: '한쪽' },
+                          { key: 'talk' as const, label: '알림톡' },
+                          { key: 'ratio' as const, label: '비율(%)' },
+                        ].map(col => (
+                          <th
+                            key={col.label}
+                            className={`px-4 py-3 text-left text-sm font-semibold ${col.key ? 'cursor-pointer hover:bg-white/10 select-none' : ''}`}
+                            onClick={() => {
+                              if (!col.key) return
+                              if (introSortKey === col.key) {
+                                setIntroSortDir(d => d === 'desc' ? 'asc' : 'desc')
+                              } else {
+                                setIntroSortKey(col.key)
+                                setIntroSortDir('desc')
+                              }
+                            }}
+                          >
+                            {col.label}
+                            {col.key && introSortKey === col.key && (
+                              <span className="ml-1">{introSortDir === 'desc' ? '▼' : '▲'}</span>
+                            )}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {computedIntroStats.managerStats.map(stat => (
+                        <tr key={stat.manager} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-4 py-3 font-semibold text-gray-900">{stat.manager}</td>
+                          <td className="px-4 py-3 font-medium text-gray-900">{stat.total.toLocaleString()}</td>
+                          <td className="px-4 py-3 text-gray-600">{stat.side.toLocaleString()}</td>
+                          <td className="px-4 py-3 text-gray-600">{stat.talk.toLocaleString()}</td>
+                          <td className="px-4 py-3">
+                            <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-violet-100 text-violet-700">
+                              {stat.ratio.toFixed(1)}%
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* 데이터 상세 테이블 */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="p-5 border-b border-gray-200 flex items-center justify-between">
+                  <h2 className="text-base font-semibold text-gray-900">
+                    📄 상세 데이터
+                    <span className="ml-2 text-sm font-normal text-gray-500">
+                      ({computedIntroStats.filtered.length.toLocaleString()}건)
+                    </span>
+                  </h2>
+                  <span className="text-xs text-gray-400">
+                    {introPage} / {computedIntroStats.totalPages} 페이지
+                  </span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        {['날짜', 'NO', '매니저', '담당자', '상태', '등급', '한쪽', '알림톡'].map(h => (
+                          <th key={h} className="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {computedIntroStats.pageData.map((row, idx) => (
+                        <tr key={`${row.record_date}-${row.no_code}-${idx}`} className="hover:bg-gray-50 text-sm">
+                          <td className="px-4 py-2 text-gray-700">{row.record_date}</td>
+                          <td className="px-4 py-2 text-gray-600 font-mono text-xs">{row.no_code}</td>
+                          <td className="px-4 py-2 text-gray-700">{row.manager || '-'}</td>
+                          <td className="px-4 py-2 text-gray-700">{row.staff || '-'}</td>
+                          <td className="px-4 py-2 text-gray-600">{row.raw_data?.['상태'] ?? '-'}</td>
+                          <td className="px-4 py-2 text-gray-600">{row.raw_data?.['등급'] ?? '-'}</td>
+                          <td className="px-4 py-2">
+                            {SIDE_INTRO_VALUES.includes(row.raw_data?.['한쪽'])
+                              ? <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">{String(row.raw_data?.['한쪽'] ?? '')}</span>
+                              : <span className="text-gray-400">{String(row.raw_data?.['한쪽'] ?? '-')}</span>
+                            }
+                          </td>
+                          <td className="px-4 py-2">
+                            {TALK_INTRO_VALUES.includes(row.raw_data?.['알림톡'])
+                              ? <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-xs">{String(row.raw_data?.['알림톡'] ?? '')}</span>
+                              : <span className="text-gray-400">{String(row.raw_data?.['알림톡'] ?? '-')}</span>
+                            }
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* 페이지네이션 */}
+                {computedIntroStats.totalPages > 1 && (
+                  <div className="px-5 py-3 border-t border-gray-200 flex items-center justify-between">
+                    <button
+                      onClick={() => setIntroPage(p => Math.max(1, p - 1))}
+                      disabled={introPage === 1}
+                      className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50 transition-colors"
+                    >
+                      이전
+                    </button>
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: Math.min(7, computedIntroStats.totalPages) }, (_, i) => {
+                        let page: number
+                        const total = computedIntroStats.totalPages
+                        if (total <= 7) {
+                          page = i + 1
+                        } else if (introPage <= 4) {
+                          page = i + 1
+                        } else if (introPage >= total - 3) {
+                          page = total - 6 + i
+                        } else {
+                          page = introPage - 3 + i
+                        }
+                        return (
+                          <button
+                            key={page}
+                            onClick={() => setIntroPage(page)}
+                            className={`w-8 h-8 text-sm rounded-lg transition-colors ${
+                              introPage === page
+                                ? 'bg-violet-600 text-white font-semibold'
+                                : 'hover:bg-gray-100 text-gray-600'
+                            }`}
+                          >
+                            {page}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <button
+                      onClick={() => setIntroPage(p => Math.min(computedIntroStats.totalPages, p + 1))}
+                      disabled={introPage === computedIntroStats.totalPages}
+                      className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50 transition-colors"
+                    >
+                      다음
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}
