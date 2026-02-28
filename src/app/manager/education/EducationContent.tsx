@@ -18,6 +18,8 @@ interface Post {
   author_id: string
   isRead: boolean
   approval_status?: 'approved' | 'pending'
+  targeting_type?: 'group' | 'individual'
+  targetGroups?: string[]
 }
 
 interface SubCategory {
@@ -61,17 +63,29 @@ export default function EducationContent({ posts, subCategories, allowedCategori
     setActiveSubCategory(null)
   }
 
+  // 탭 매칭 헬퍼: 게시물이 해당 카테고리 탭에 속하는지 판단
+  const matchesTab = (post: Post, categoryId: string): boolean => {
+    if (categoryId === '개인_피드백') {
+      return post.targeting_type === 'individual' || post.category === '개인_피드백'
+    }
+    const catLabel = ALL_CATEGORIES.find(c => c.id === categoryId)?.label
+    if (!catLabel) return false
+    return post.targeting_type !== 'individual' && (
+      (post.targetGroups || []).some(g => g === catLabel)
+      || post.category === categoryId
+    )
+  }
+
   // 현재 탭의 게시물 필터링
   const filteredPosts = posts.filter((post) => {
-    const matchesCategory = post.category === activeTab
+    const matchesCategory = matchesTab(post, activeTab)
     const matchesSubCategory = activeSubCategory === null || post.sub_category === activeSubCategory
     return matchesCategory && matchesSubCategory
   })
 
   // 미확인 게시물 수 계산
   const getUnreadCount = (categoryId: string) => {
-    return posts.filter((post) => post.category === categoryId && !post.isRead)
-      .length
+    return posts.filter((post) => matchesTab(post, categoryId) && !post.isRead).length
   }
 
   return (

@@ -198,6 +198,20 @@ export default function PostDetail({
     }
   }
 
+  // 콘텐츠 전처리: image-row div 내 마크다운 이미지를 HTML img 태그로 변환
+  const preprocessContent = (content: string): string => {
+    return content.replace(
+      /<div class="image-row">([\s\S]*?)<\/div>/g,
+      (_match, inner: string) => {
+        const htmlInner = inner.replace(
+          /!\[([^\]]*)\]\(([^)]+)\)/g,
+          (_m: string, alt: string, url: string) => `<img src="${url}" alt="${alt}" />`
+        )
+        return `<div class="image-row">${htmlInner}</div>`
+      }
+    )
+  }
+
   // 게시물 삭제 핸들러
   const handleDeletePost = async () => {
     setIsDeletingPost(true)
@@ -380,6 +394,7 @@ export default function PostDetail({
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[rehypeRaw]}
+                remarkRehypeOptions={{ allowDangerousHtml: true }}
                 components={{
                   img: ({ node, ...props }) => (
                     <img
@@ -391,7 +406,7 @@ export default function PostDetail({
                   ),
                 }}
               >
-                {post.content}
+                {preprocessContent(post.content)}
               </ReactMarkdown>
             </div>
           )}

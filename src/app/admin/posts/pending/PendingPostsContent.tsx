@@ -188,6 +188,7 @@ export default function PendingPostsContent({ posts: initialPosts }: PendingPost
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
                       rehypePlugins={[rehypeRaw]}
+                      remarkRehypeOptions={{ allowDangerousHtml: true }}
                       components={{
                         img: ({ node, ...props }) => (
                           <img
@@ -198,7 +199,10 @@ export default function PendingPostsContent({ posts: initialPosts }: PendingPost
                         ),
                       }}
                     >
-                      {post.content}
+                      {post.content.replace(
+                        /<div class="image-row">([\s\S]*?)<\/div>/g,
+                        (_m, inner: string) => `<div class="image-row">${inner.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_i: string, alt: string, url: string) => `<img src="${url}" alt="${alt}" />`)}</div>`
+                      )}
                     </ReactMarkdown>
                   </div>
                 </div>

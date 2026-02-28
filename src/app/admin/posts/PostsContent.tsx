@@ -66,6 +66,7 @@ export default function PostsContent({ posts: initialPosts }: PostsContentProps)
   })
   const [activeSubCategory, setActiveSubCategory] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
+  const [selectedRecipient, setSelectedRecipient] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [showUnreadModal, setShowUnreadModal] = useState(false)
   const [selectedPostTitle, setSelectedPostTitle] = useState('')
@@ -95,9 +96,10 @@ export default function PostsContent({ posts: initialPosts }: PostsContentProps)
     fetchSubCategories()
   }, [])
 
-  // 카테고리 변경 시 서브카테고리 필터 초기화
+  // 카테고리 변경 시 서브카테고리 필터 + 수신자 필터 초기화
   useEffect(() => {
     setActiveSubCategory(null)
+    setSelectedRecipient(null)
   }, [activeCategory])
 
   // 현재 카테고리의 서브카테고리
@@ -115,11 +117,27 @@ export default function PostsContent({ posts: initialPosts }: PostsContentProps)
     )
   }
 
+  // 개인 피드백 탭의 수신자 목록 (중복 제거)
+  const recipientOptions = (() => {
+    if (activeCategory !== '개인_피드백') return []
+    const seen = new Map<string, string>()
+    posts.filter(p => matchesTab(p, '개인_피드백')).forEach(p => {
+      ;(p.targetUsers || []).forEach(u => {
+        seen.set(u.username, u.nickname || u.username)
+      })
+    })
+    return Array.from(seen.entries()).map(([username, name]) => ({ username, name })).sort((a, b) => a.name.localeCompare(b.name, 'ko'))
+  })()
+
   // 현재 카테고리의 게시물
   const categoryPosts = posts.filter((post) => {
-    return matchesTab(post, activeCategory)
-      && (activeSubCategory === null || post.sub_category === activeSubCategory)
-      && post.title.toLowerCase().includes(searchTerm.toLowerCase())
+    if (!matchesTab(post, activeCategory)) return false
+    if (activeSubCategory !== null && post.sub_category !== activeSubCategory) return false
+    if (!post.title.toLowerCase().includes(searchTerm.toLowerCase())) return false
+    if (activeCategory === '개인_피드백' && selectedRecipient !== null) {
+      return (post.targetUsers || []).some(u => u.username === selectedRecipient)
+    }
+    return true
   })
 
   // 카테고리별 게시물 수
@@ -473,6 +491,41 @@ export default function PostsContent({ posts: initialPosts }: PostsContentProps)
           )}
         </div>
       </div>
+
+      {/* 개인 피드백 수신자 필터 */}
+      {activeCategory === '개인_피드백' && recipientOptions.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-medium text-gray-600 mr-1">수신자:</span>
+            <button
+              onClick={() => setSelectedRecipient(null)}
+              className={`px-3 py-1.5 text-sm rounded-full border transition-colors ${
+                selectedRecipient === null
+                  ? 'bg-teal-600 text-white border-teal-600'
+                  : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              전체
+            </button>
+            {recipientOptions.map(({ username, name }) => (
+              <button
+                key={username}
+                onClick={() => setSelectedRecipient(selectedRecipient === username ? null : username)}
+                className={`px-3 py-1.5 text-sm rounded-full border transition-colors ${
+                  selectedRecipient === username
+                    ? 'bg-teal-600 text-white border-teal-600'
+                    : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                {name}
+                <span className="ml-1 text-xs opacity-70">
+                  ({posts.filter(p => matchesTab(p, '개인_피드백') && (p.targetUsers || []).some(u => u.username === username)).length})
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 게시물 목록 */}
       {categoryPosts.length > 0 ? (
