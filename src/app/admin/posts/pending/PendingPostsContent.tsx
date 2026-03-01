@@ -58,7 +58,7 @@ export default function PendingPostsContent({ posts: initialPosts }: PendingPost
     try {
       const { error } = await supabase
         .from('educational_posts')
-        .update({ approval_status: 'approved' })
+        .update({ approval_status: 'approved', approved_at: new Date().toISOString() })
         .eq('id', postId)
 
       if (error) throw error

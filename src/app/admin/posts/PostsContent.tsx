@@ -26,6 +26,7 @@ interface Post {
   targeting_type?: 'group' | 'individual'
   created_at: string
   updated_at: string
+  approved_at: string | null
   author_id: string
   unreadCount: number
   unreadManagers: UnreadManager[]
@@ -112,7 +113,7 @@ export default function PostsContent({ posts: initialPosts }: PostsContentProps)
     }
     const catLabel = CATEGORIES.find(c => c.value === category)!.label
     return post.targeting_type !== 'individual' && (
-      (post.targetGroups || []).some(g => g === catLabel)
+      (post.targetGroups || []).some(g => g.replace(/_/g, ' ') === catLabel || g === catLabel)
       || post.category === category // 기존 게시물 하위 호환
     )
   }
@@ -562,7 +563,7 @@ export default function PostsContent({ posts: initialPosts }: PostsContentProps)
                     )}
                   </div>
                   <div className="flex items-center gap-2 mt-1 text-sm text-gray-500 flex-wrap">
-                    <span>{formatDate(post.created_at)}</span>
+                    <span>{formatDate(post.approved_at || post.created_at)}</span>
                     <span>{post.content_type === 'video' ? '동영상' : '문서'}</span>
                     {post.sub_category && (
                       <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">

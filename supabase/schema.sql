@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS public.educational_posts (
     images JSONB DEFAULT '[]'::jsonb, -- 첨부 이미지 URL 배열
     test_visibility TEXT NOT NULL DEFAULT 'all' CHECK (test_visibility IN ('all', 'targeted')),
     approval_status TEXT NOT NULL DEFAULT 'approved' CHECK (approval_status IN ('approved', 'pending')),
+    approved_at TIMESTAMPTZ DEFAULT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     author_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE

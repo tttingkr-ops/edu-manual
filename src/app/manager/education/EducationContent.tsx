@@ -15,6 +15,7 @@ interface Post {
   sub_category: string | null
   created_at: string
   updated_at: string
+  approved_at: string | null
   author_id: string
   isRead: boolean
   approval_status?: 'approved' | 'pending'
@@ -71,7 +72,7 @@ export default function EducationContent({ posts, subCategories, allowedCategori
     const catLabel = ALL_CATEGORIES.find(c => c.id === categoryId)?.label
     if (!catLabel) return false
     return post.targeting_type !== 'individual' && (
-      (post.targetGroups || []).some(g => g === catLabel)
+      (post.targetGroups || []).some(g => g.replace(/_/g, ' ') === catLabel || g === catLabel)
       || post.category === categoryId
     )
   }
@@ -232,7 +233,7 @@ export default function EducationContent({ posts, subCategories, allowedCategori
               title={post.title}
               contentType={post.content_type}
               category={post.category}
-              createdAt={post.created_at}
+              createdAt={post.approved_at || post.created_at}
               isRead={post.isRead}
               approvalStatus={post.approval_status}
             />

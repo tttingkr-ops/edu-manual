@@ -63,6 +63,7 @@ export interface Database {
           images: Json;
           test_visibility: 'all' | 'targeted';
           approval_status: 'approved' | 'pending';
+          approved_at: string | null;
           display_nickname: string | null;
         };
         Insert: {
@@ -80,6 +81,7 @@ export interface Database {
           images?: Json;
           test_visibility?: 'all' | 'targeted';
           approval_status?: 'approved' | 'pending';
+          approved_at?: string | null;
           display_nickname?: string | null;
         };
         Update: {
@@ -97,6 +99,7 @@ export interface Database {
           images?: Json;
           test_visibility?: 'all' | 'targeted';
           approval_status?: 'approved' | 'pending';
+          approved_at?: string | null;
           display_nickname?: string | null;
         };
         Relationships: [

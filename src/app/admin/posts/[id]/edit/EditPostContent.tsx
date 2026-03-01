@@ -213,6 +213,7 @@ export default function EditPostContent({ post, initialGroups, initialTargetUser
 
       if (approveAfterSave) {
         updateData.approval_status = 'approved'
+        updateData.approved_at = new Date().toISOString()
       }
 
       const { error: updateError } = await supabase

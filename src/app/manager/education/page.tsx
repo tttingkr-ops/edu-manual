@@ -104,12 +104,16 @@ export default async function EducationPage() {
     readStatuses?.map((rs: { post_id: string; is_read: boolean }) => [rs.post_id, rs.is_read]) || []
   )
 
-  // 필터링된 게시물에 읽음 상태 + 타겟그룹 추가
+  // 필터링된 게시물에 읽음 상태 + 타겟그룹 추가, 승인일 기준 정렬
   const postsWithReadStatus = filteredPosts.map((post: any) => ({
     ...post,
     isRead: readStatusMap.get(post.id) || false,
     targetGroups: postGroupMap.get(post.id) || [],
-  }))
+  })).sort((a: any, b: any) => {
+    const dateA = a.approved_at || a.created_at
+    const dateB = b.approved_at || b.created_at
+    return new Date(dateB).getTime() - new Date(dateA).getTime()
+  })
 
   // 사용자 그룹 → 허용 카테고리 계산 (그룹명의 공백을 언더스코어로 변환)
   // 관리자는 모든 카테고리 접근 가능
