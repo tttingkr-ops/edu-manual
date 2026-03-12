@@ -99,6 +99,10 @@ export default async function PostsPage() {
       targetUsers,
       comment_count: commentCount,
     }
+  }).sort((a, b) => {
+    const dateA = a.approved_at || a.created_at
+    const dateB = b.approved_at || b.created_at
+    return new Date(dateB).getTime() - new Date(dateA).getTime()
   })
 
   return <PostsContent posts={postsWithUnread} />

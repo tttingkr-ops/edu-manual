@@ -130,7 +130,7 @@ export default function PostsContent({ posts: initialPosts }: PostsContentProps)
     return Array.from(seen.entries()).map(([username, name]) => ({ username, name })).sort((a, b) => a.name.localeCompare(b.name, 'ko'))
   })()
 
-  // 현재 카테고리의 게시물
+  // 현재 카테고리의 게시물 (승인일 기준 최신순 정렬)
   const categoryPosts = posts.filter((post) => {
     if (!matchesTab(post, activeCategory)) return false
     if (activeSubCategory !== null && post.sub_category !== activeSubCategory) return false
@@ -139,6 +139,10 @@ export default function PostsContent({ posts: initialPosts }: PostsContentProps)
       return (post.targetUsers || []).some(u => u.username === selectedRecipient)
     }
     return true
+  }).sort((a, b) => {
+    const dateA = a.approved_at || a.created_at
+    const dateB = b.approved_at || b.created_at
+    return new Date(dateB).getTime() - new Date(dateA).getTime()
   })
 
   // 카테고리별 게시물 수

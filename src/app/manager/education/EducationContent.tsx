@@ -77,11 +77,15 @@ export default function EducationContent({ posts, subCategories, allowedCategori
     )
   }
 
-  // 현재 탭의 게시물 필터링
+  // 현재 탭의 게시물 필터링 (승인일 기준 최신순 정렬)
   const filteredPosts = posts.filter((post) => {
     const matchesCategory = matchesTab(post, activeTab)
     const matchesSubCategory = activeSubCategory === null || post.sub_category === activeSubCategory
     return matchesCategory && matchesSubCategory
+  }).sort((a, b) => {
+    const dateA = new Date(a.approved_at || a.created_at).getTime()
+    const dateB = new Date(b.approved_at || b.created_at).getTime()
+    return dateB - dateA
   })
 
   // 미확인 게시물 수 계산
