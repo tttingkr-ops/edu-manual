@@ -1,9 +1,7 @@
 // Created: 2026-01-27 16:30:00
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import '@fontsource-variable/inter/wght.css'
 import './globals.css'
-
-const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
   title: '팅팅팅 교육 시스템',
@@ -17,7 +15,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko">
-      <body className={inter.className}>{children}</body>
+      <body>{children}</body>
     </html>
   )
 }

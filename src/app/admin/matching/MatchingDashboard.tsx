@@ -1036,7 +1036,7 @@ export default function MatchingDashboard() {
             <ul className="list-disc list-inside space-y-1 text-amber-700">
               <li>처음에는 전체 기간 파일을 업로드하세요. 이후에는 새 기간 파일만 추가하면 됩니다.</li>
               <li>같은 날짜·번호의 데이터를 다시 올려도 중복 저장되지 않습니다.</li>
-              <li>업로드 후 "성과 분석" 탭에서 날짜 범위를 설정하고 분석을 시작하세요.</li>
+              <li>업로드 후 &quot;성과 분석&quot; 탭에서 날짜 범위를 설정하고 분석을 시작하세요.</li>
             </ul>
           </div>
         </div>

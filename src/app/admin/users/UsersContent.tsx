@@ -503,7 +503,7 @@ export default function UsersContent({
     { value: '남자_매니저_대화', label: '남자 매니저 대화' },
     { value: '여자_매니저_대화', label: '여자 매니저 대화' },
     { value: '여자_매니저_소개', label: '여자 매니저 소개' },
-    { value: '추가_서비스_규칙', label: '추가 서비스 규칙' },
+    { value: '추가_서비스_규칙', label: '공지사항' },
     { value: '개인_피드백', label: '개인 피드백' },
   ]
 

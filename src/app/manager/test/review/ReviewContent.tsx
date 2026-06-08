@@ -110,7 +110,6 @@ export default function ReviewContent({
 
     // wrong_answer_reviews에 저장
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const inserts: any[] = reviewResults.map(r => ({
         user_id: userId,
         test_result_id: testResultId,

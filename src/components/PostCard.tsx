@@ -2,6 +2,7 @@
 'use client'
 
 import Link from 'next/link'
+import { normalizeNoticeText } from '@/lib/notice-label'
 
 interface PostCardProps {
   id: string
@@ -36,7 +37,7 @@ export default function PostCard({
       '남자_매니저_대화': '남자 매니저 대화',
       '여자_매니저_대화': '여자 매니저 대화',
       '여자_매니저_소개': '여자 매니저 소개',
-      '추가_서비스_규칙': '추가 서비스 규칙',
+      '추가_서비스_규칙': '공지사항',
       '개인_피드백': '개인 피드백',
     }
     return labels[cat] || cat
@@ -122,7 +123,7 @@ export default function PostCard({
                 isRead ? 'text-gray-900' : 'text-primary-900'
               }`}
             >
-              {title}
+              {normalizeNoticeText(title)}
             </h3>
 
             {/* 메타 정보 */}

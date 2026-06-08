@@ -490,7 +490,7 @@ INSERT INTO public.educational_posts (id, title, content_type, content, category
 ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '남자 매니저 기본 대화법', 'video', 'https://youtube.com/watch?v=sample1', '남자_매니저_대화', '11111111-1111-1111-1111-111111111111'),
 ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '여자 매니저 인사 멘트', 'document', '# 인사 멘트 가이드\n\n안녕하세요! 환영합니다...', '여자_매니저_대화', '11111111-1111-1111-1111-111111111111'),
 ('cccccccc-cccc-cccc-cccc-cccccccccccc', '여자 매니저 자기소개 방법', 'video', 'https://youtube.com/watch?v=sample2', '여자_매니저_소개', '11111111-1111-1111-1111-111111111111'),
-('dddddddd-dddd-dddd-dddd-dddddddddddd', '추가 서비스 규칙 안내', 'document', '# 추가 서비스 규칙\n\n1. 규칙 1...\n2. 규칙 2...', '추가_서비스_규칙', '55555555-5555-5555-5555-555555555555'),
+('dddddddd-dddd-dddd-dddd-dddddddddddd', '공지사항 안내', 'document', '# 공지사항\n\n1. 규칙 1...\n2. 규칙 2...', '추가_서비스_규칙', '55555555-5555-5555-5555-555555555555'),
 ('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', '남자 매니저 고급 대화 기술', 'video', 'https://youtube.com/watch?v=sample3', '남자_매니저_대화', '11111111-1111-1111-1111-111111111111');
 
 -- ============================================

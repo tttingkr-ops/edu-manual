@@ -69,9 +69,9 @@ export const mockPosts = [
   },
   {
     id: 'dddddddd-dddd-dddd-dddd-dddddddddddd',
-    title: '추가 서비스 규칙 안내',
+    title: '공지사항 안내',
     content_type: 'document' as const,
-    content: '# 추가 서비스 규칙\n\n## 기본 규칙\n1. 규칙 1: 항상 고객 동의를 먼저 구합니다.\n2. 규칙 2: 서비스 내용을 명확히 설명합니다.\n3. 규칙 3: 추가 비용이 있을 경우 사전 고지합니다.',
+    content: '# 공지사항\n\n## 기본 규칙\n1. 규칙 1: 항상 고객 동의를 먼저 구합니다.\n2. 규칙 2: 서비스 내용을 명확히 설명합니다.\n3. 규칙 3: 추가 비용이 있을 경우 사전 고지합니다.',
     category: '추가_서비스_규칙' as const,
     created_at: '2026-01-23T11:00:00Z',
     updated_at: '2026-01-23T11:00:00Z',
@@ -270,7 +270,7 @@ export const mockTestQuestions = [
     correct_answer: 2,
     related_post_id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
   },
-  // 추가 서비스 규칙 문제
+  // 공지사항 문제
   {
     id: 'q4444444-4444-4444-4444-444444444441',
     category: '추가_서비스_규칙',

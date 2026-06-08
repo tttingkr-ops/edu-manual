@@ -19,6 +19,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
 import { createClient } from '@/lib/supabase/client'
+import { normalizeNoticeText } from '@/lib/notice-label'
 
 interface Post {
   id: string
@@ -140,7 +141,7 @@ export default function PostDetail({
       '남자_매니저_대화': '남자 매니저 대화',
       '여자_매니저_대화': '여자 매니저 대화',
       '여자_매니저_소개': '여자 매니저 소개',
-      '추가_서비스_규칙': '추가 서비스 규칙',
+      '추가_서비스_규칙': '공지사항',
       '개인_피드백': '개인 피드백',
     }
     return labels[cat] || cat
@@ -307,7 +308,7 @@ export default function PostDetail({
 
           {/* 제목 */}
           <h1 className="text-2xl font-bold text-gray-900 mb-3">
-            {post.title}
+            {normalizeNoticeText(post.title)}
           </h1>
 
           {/* 메타 정보 */}
@@ -351,7 +352,7 @@ export default function PostDetail({
                   src={`https://www.youtube.com/embed/${getYouTubeVideoId(
                     post.content
                   )}`}
-                  title={post.title}
+                  title={normalizeNoticeText(post.title)}
                   frameBorder="0"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                   allowFullScreen
@@ -406,7 +407,7 @@ export default function PostDetail({
                   ),
                 }}
               >
-                {preprocessContent(post.content)}
+                {preprocessContent(normalizeNoticeText(post.content))}
               </ReactMarkdown>
             </div>
           )}

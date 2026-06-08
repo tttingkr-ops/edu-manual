@@ -52,7 +52,12 @@ next-env.d.ts
 # Playwright MCP
 .playwright-mcp/
 
+# Serena MCP local install
+.serena/
+.serena-local/
+
 # Temp files
 _ul
 nul
 test-dnd-initial.png
+.npm-cache/

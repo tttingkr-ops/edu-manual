@@ -28,7 +28,7 @@ const CATEGORIES = [
   },
   {
     id: '추가_서비스_규칙',
-    title: '추가 서비스 규칙',
+    title: '공지사항',
     description: '추가 서비스 제공 시 준수해야 할 규칙 테스트',
     icon: '📋',
     color: 'bg-orange-500',

@@ -51,7 +51,7 @@ const CATEGORIES: { value: Category; label: string; color: string; bgColor: stri
   { value: '남자_매니저_대화', label: '남자 매니저 대화', color: 'text-blue-600', bgColor: 'bg-blue-50 border-blue-200' },
   { value: '여자_매니저_대화', label: '여자 매니저 대화', color: 'text-pink-600', bgColor: 'bg-pink-50 border-pink-200' },
   { value: '여자_매니저_소개', label: '여자 매니저 소개', color: 'text-purple-600', bgColor: 'bg-purple-50 border-purple-200' },
-  { value: '추가_서비스_규칙', label: '추가 서비스 규칙', color: 'text-orange-600', bgColor: 'bg-orange-50 border-orange-200' },
+  { value: '추가_서비스_규칙', label: '공지사항', color: 'text-orange-600', bgColor: 'bg-orange-50 border-orange-200' },
   { value: '개인_피드백', label: '개인 피드백', color: 'text-teal-600', bgColor: 'bg-teal-50 border-teal-200' },
 ]
 
